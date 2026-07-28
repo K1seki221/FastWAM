@@ -22,7 +22,9 @@ fi
 set -euo pipefail
 
 # ----- site constants (edit once; conventions from the team's iron_vla run.sh) -----
-export FUYAO_USER="${FUYAO_USER:-CHANGE_ME@xiaopeng.com}"
+export FUYAO_USER="${FUYAO_USER:-ruijie.zhang@xiaopeng.com}"
+# The cluster checkout lives on persistent storage, not /workspace.
+export REPO_ROOT="${REPO_ROOT:-/dataset_rc/${FUYAO_USER}/FastWAM}"
 PROJECT="${PROJECT:-rc-embodied-foundation-model}"
 SITE="${SITE:-fuyao_sh_n2}"
 EXPERIMENT="${EXPERIMENT:-ruijie}"
@@ -78,7 +80,7 @@ done
 if [[ "${JOB_DRY_RUN:-0}" == "1" ]]; then
   job_cmd+=("DRY_RUN=1")
 fi
-job_cmd+=(bash "/workspace/${FUYAO_USER}/FastWAM/scripts/deploy_fuyao_train_and_eval.sh" "$nproc")
+job_cmd+=(bash "${REPO_ROOT}/scripts/deploy_fuyao_train_and_eval.sh" "$nproc")
 for arg in "$@"; do
   job_cmd+=("$(printf '%q' "$arg")")
 done

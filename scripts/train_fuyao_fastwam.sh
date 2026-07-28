@@ -24,9 +24,9 @@ fi
 set -euo pipefail
 
 # ----- user/site constants (edit FUYAO_USER or override everything via env) -----
-export FUYAO_USER="${FUYAO_USER:-CHANGE_ME@xiaopeng.com}"
+export FUYAO_USER="${FUYAO_USER:-ruijie.zhang@xiaopeng.com}"
 
-DEFAULT_REPO_ROOT="/workspace/${FUYAO_USER}/FastWAM"
+DEFAULT_REPO_ROOT="/dataset_rc/${FUYAO_USER}/FastWAM"
 export REPO_ROOT="${REPO_ROOT:-${WORKSPACE_ROOT:-$DEFAULT_REPO_ROOT}}"
 export CONDA_ROOT="${CONDA_ROOT:-/dataset_rc/${FUYAO_USER}/miniconda3}"
 export CONDA_ENV="${CONDA_ENV:-$CONDA_ROOT/envs/wam}"

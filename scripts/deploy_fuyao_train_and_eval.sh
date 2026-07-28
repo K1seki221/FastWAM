@@ -28,9 +28,9 @@ fi
 
 set -euo pipefail
 
-export FUYAO_USER="${FUYAO_USER:-CHANGE_ME@xiaopeng.com}"
+export FUYAO_USER="${FUYAO_USER:-ruijie.zhang@xiaopeng.com}"
 
-DEFAULT_REPO_ROOT="/workspace/${FUYAO_USER}/FastWAM"
+DEFAULT_REPO_ROOT="/dataset_rc/${FUYAO_USER}/FastWAM"
 export REPO_ROOT="${REPO_ROOT:-${WORKSPACE_ROOT:-$DEFAULT_REPO_ROOT}}"
 export RUNS_ROOT="${RUNS_ROOT:-/dataset_rc/${FUYAO_USER}/projects/fastwam/runs}"
 export TASK_CONFIG="${TASK_CONFIG:-libero_uncond_2cam224_1e-4}"
