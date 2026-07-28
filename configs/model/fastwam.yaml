@@ -6,7 +6,8 @@ load_text_encoder: false
 proprio_dim: ${data.train.processor.proprio_output_dim}
 redirect_common_files: true
 mot_checkpoint_mixed_attn: true
-action_dit_pretrained_path: checkpoints/ActionDiT_linear_interp_Wan22_alphascale_1024hdim.pt
+# fuyao shared location (original relative path: checkpoints/ActionDiT_linear_interp_Wan22_alphascale_1024hdim.pt)
+action_dit_pretrained_path: /dataset_rc/vlm/fm_models/VIT/WAM/FastWAM/checkpoints/ActionDiT_linear_interp_Wan22_alphascale_1024hdim.pt
 skip_dit_load_from_pretrain: false
 
 video_dit_config:
