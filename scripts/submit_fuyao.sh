@@ -34,7 +34,7 @@ DOCKER_IMAGE="${DOCKER_IMAGE:-infra-registry-vpc.cn-wulanchabu.cr.aliyuncs.com/d
 # e.g. GPU_TYPE=h200 QUEUE=rc-embodied-foundation-model-h200-p1 VOLUME=rc-perception).
 GPU_TYPE="${GPU_TYPE:-}"
 QUEUE="${QUEUE:-}"
-VOLUME="${VOLUME:-}"
+VOLUME="${VOLUME:-rc-perception}"
 LABEL="${LABEL:-${RUN_NAME:-fastwam}}"
 # Borrowed env for now; switch to your own once built
 # (safe: the wrappers put the checkout's src/ first on PYTHONPATH).
