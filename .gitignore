@@ -242,3 +242,8 @@ manifest.json
 wandb/
 onelogger.err
 onelogger.log
+
+# vendored Isaac-GR00T needs its txt/pt files despite the global ignores
+!Isaac-GR00T/**/*.txt
+!Isaac-GR00T/**/*.pt
+Isaac-GR00T/.venv/
