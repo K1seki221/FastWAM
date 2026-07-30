@@ -14,6 +14,7 @@ RUNS_ROOT="${RUNS_ROOT:-/dataset_rc/${FUYAO_USER}/projects/groot_runs}"
 # HF cache on the user's own /dataset_rc (always mounted in jobs);
 # weights pre-downloaded -> offline by default.
 export HF_HOME="${HF_HOME:-/dataset_rc/${FUYAO_USER}/hf}"
+export HF_HUB_CACHE="$HF_HOME/hub"   # containers may pre-set HF_HUB_CACHE, which outranks HF_HOME
 [[ -d "$HF_HOME/hub/models--nvidia--GR00T-N1.7-3B" ]] \
   || { echo "GR00T-N1.7-3B not in $HF_HOME/hub — copy the model caches there first" >&2; exit 1; }
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
