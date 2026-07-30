@@ -11,8 +11,11 @@ VENV_DIR="${VENV_DIR:-/dataset_rc/${FUYAO_USER}/projects/groot/venv}"
 DATA_ROOT="${DATA_ROOT:-/dataset_rc/${FUYAO_USER}/libero_groot}"
 RUNS_ROOT="${RUNS_ROOT:-/dataset_rc/${FUYAO_USER}/projects/groot_runs}"
 
-# HF cache: cluster-shared; weights pre-downloaded -> offline by default.
-export HF_HOME="${HF_HOME:-/dataset-cpfs3-rc/hf}"
+# HF cache on the user's own /dataset_rc (always mounted in jobs);
+# weights pre-downloaded -> offline by default.
+export HF_HOME="${HF_HOME:-/dataset_rc/${FUYAO_USER}/hf}"
+[[ -d "$HF_HOME/hub/models--nvidia--GR00T-N1.7-3B" ]] \
+  || { echo "GR00T-N1.7-3B not in $HF_HOME/hub — copy the model caches there first" >&2; exit 1; }
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 
