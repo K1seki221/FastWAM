@@ -6,6 +6,8 @@ set -euo pipefail
 export FUYAO_USER="${FUYAO_USER:-ruijie.zhang@xiaopeng.com}"
 export REPO_ROOT="${REPO_ROOT:-/dataset_rc/${FUYAO_USER}/FastWAM}"
 GROOT="${GROOT:-$REPO_ROOT/Isaac-GR00T}"
+# Venv lives OUTSIDE the repo (fuyao snapshots the submit dir; keep it small).
+VENV_DIR="${VENV_DIR:-/dataset_rc/${FUYAO_USER}/projects/groot/venv}"
 DATA_ROOT="${DATA_ROOT:-/dataset_rc/${FUYAO_USER}/libero_groot}"
 RUNS_ROOT="${RUNS_ROOT:-/dataset_rc/${FUYAO_USER}/projects/groot_runs}"
 
@@ -36,7 +38,14 @@ fi
 dataset="$DATA_ROOT/libero_${SUITE}_no_noops_1.0.0_lerobot"
 [[ -d "$dataset" ]] || { echo "dataset not found: $dataset" >&2; exit 1; }
 [[ -f "$dataset/meta/modality.json" ]] || { echo "missing $dataset/meta/modality.json" >&2; exit 1; }
-[[ -x "$GROOT/.venv/bin/python" ]] || { echo "venv missing: run 'uv sync' in $GROOT first" >&2; exit 1; }
+if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+  if [[ -x "$GROOT/.venv/bin/python" ]]; then
+    VENV_DIR="$GROOT/.venv"   # legacy in-repo venv fallback
+  else
+    echo "venv missing: UV_PROJECT_ENVIRONMENT=$VENV_DIR uv sync (in $GROOT) first" >&2
+    exit 1
+  fi
+fi
 
 router_args=()
 if [[ "$USE_ROUTER" == "1" ]]; then
@@ -48,7 +57,7 @@ elif [[ -n "$EXTRA_ARGS" ]]; then
 fi
 
 cd "$GROOT"
-source .venv/bin/activate
+source "$VENV_DIR/bin/activate"
 echo "[groot] suite=$SUITE run=$RUN_NAME gpus=$NUM_GPUS steps=$MAX_STEPS batch=$GLOBAL_BATCH_SIZE router=$USE_ROUTER wandb=$USE_WANDB"
 exec bash examples/finetune.sh \
   --base-model-path nvidia/GR00T-N1.7-3B \
