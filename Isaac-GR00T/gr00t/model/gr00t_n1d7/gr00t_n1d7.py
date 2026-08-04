@@ -44,12 +44,21 @@ class ConditionRouter(nn.Module):
     close to the stock wiring.
     """
 
-    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float):
+    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False):
         super().__init__()
         self.norms = nn.ModuleList([nn.LayerNorm(dim) for _ in range(num_candidates)])
+        self.init_bias = init_bias
+        self.init_mode = init_mode
         logits = torch.zeros(num_cross_blocks, num_candidates)
-        logits[:, -1] = init_bias  # incumbent = deepest candidate (stock tap)
+        if init_mode == "span":
+            # iron_vla depth-aligned identity: block-span i -> candidate i
+            for b in range(num_cross_blocks):
+                logits[b, b * num_candidates // num_cross_blocks] = init_bias
+        else:
+            logits[:, -1] = init_bias  # incumbent = deepest candidate (stock tap)
         self.logits = nn.Parameter(logits)
+        if frozen:
+            self.logits.requires_grad_(False)
 
     def forward(self, features_all: torch.Tensor) -> torch.Tensor:
         """features_all: [B, K, S, D] -> routed conditions [B, N_cross, S, D]."""
@@ -138,6 +147,8 @@ class Gr00tN1d7ActionHead(nn.Module):
                 num_candidates=len(candidates),
                 dim=config.backbone_embedding_dim,
                 init_bias=config.router_init_bias,
+                init_mode=getattr(config, "router_init_mode", "last"),
+                frozen=getattr(config, "router_frozen", False),
             )
 
         # State dropout parameters
@@ -182,6 +193,12 @@ class Gr00tN1d7ActionHead(nn.Module):
         if not tune_vlln:
             self.vlln.requires_grad_(False)
             self.vl_self_attention.requires_grad_(False)
+        # Fixed-mapping arm: the blanket requires_grad=True above would undo
+        # the ctor freeze, so re-apply it here (norms stay trainable).
+        if getattr(self, "condition_router", None) is not None and getattr(
+            self.config, "router_frozen", False
+        ):
+            self.condition_router.logits.requires_grad_(False)
         logger.debug(f"Tune action head projector: {self.tune_projector}")
         logger.debug(f"Tune action head diffusion model: {self.tune_diffusion_model}")
         logger.debug(f"Tune action head vlln: {self.tune_vlln}")
@@ -233,11 +250,27 @@ class Gr00tN1d7ActionHead(nn.Module):
 
     def init_condition_router_from_vlln(self):
         """Identity-init helper: copy trained vlln affine into the incumbent
-        (deepest) candidate norm so run start matches the stock wiring."""
-        if hasattr(self, "condition_router") and isinstance(self.vlln, nn.LayerNorm):
+        (deepest) candidate norm so run start matches the stock wiring.
+
+        Also (re-)applies the logits bias: the ctor sets it, but HF
+        from_pretrained re-initializes missing-key params afterwards, wiping
+        the ctor state — so the full identity init must happen here, at the
+        point setup.py detects the router keys missing from the checkpoint."""
+        if hasattr(self, "condition_router"):
             with torch.no_grad():
-                self.condition_router.norms[-1].weight.copy_(self.vlln.weight)
-                self.condition_router.norms[-1].bias.copy_(self.vlln.bias)
+                self.condition_router.logits.zero_()
+                if getattr(self.condition_router, "init_mode", "last") == "span":
+                    B, K = self.condition_router.logits.shape
+                    for b in range(B):
+                        self.condition_router.logits[b, b * K // B] = self.condition_router.init_bias
+                else:
+                    self.condition_router.logits[:, -1] = self.condition_router.init_bias
+                for norm in self.condition_router.norms:
+                    norm.weight.fill_(1.0)
+                    norm.bias.zero_()
+                if isinstance(self.vlln, nn.LayerNorm):
+                    self.condition_router.norms[-1].weight.copy_(self.vlln.weight)
+                    self.condition_router.norms[-1].bias.copy_(self.vlln.bias)
 
     def forward(self, backbone_output: BatchFeature, action_input: BatchFeature) -> BatchFeature:
         """
@@ -551,7 +584,9 @@ class Gr00tN1d7ActionHead(nn.Module):
 
 
 def get_backbone_cls(config: Gr00tN1d7Config):
-    if "nvidia/Cosmos-Reason2" in config.model_name or "Qwen/Qwen3-VL" in config.model_name:
+    # Substring (not org/repo prefix) so local snapshot paths like
+    # .../models--nvidia--Cosmos-Reason2-2B/snapshots/<hash> also match.
+    if "Cosmos-Reason2" in config.model_name or "Qwen3-VL" in config.model_name:
         # We import here as Qwen3Backbone depends on newer transformers versions than the rest of the code.
         from gr00t.model.modules.qwen3_backbone import Qwen3Backbone
 

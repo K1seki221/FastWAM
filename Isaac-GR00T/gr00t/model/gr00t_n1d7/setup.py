@@ -81,6 +81,22 @@ class Gr00tN1d7Pipeline(ModelPipeline):
         if self.config.training.start_from_checkpoint is not None and not skip_weight_loading:
             model, loading_info = AutoModel.from_pretrained(
                 self.config.training.start_from_checkpoint,
+                # Override the checkpoint config.json value (repo id) so a local
+                # GR00T_BACKBONE_PATH reaches the backbone + collator/processor
+                # (repo-id tokenizer loads need hub API -> crash when offline).
+                model_name=self.config.model.model_name,
+                # Router fields must be forwarded like tune_*: the checkpoint
+                # config.json predates them, so without these kwargs the loaded
+                # config silently keeps use_condition_router=False (probe
+                # has_router=False, runs v1-v3 2026-07-31) and router_lr is
+                # invisible to create_optimizer.
+                use_condition_router=self.config.model.use_condition_router,
+                router_candidate_layers=self.config.model.router_candidate_layers,
+                router_init_bias=self.config.model.router_init_bias,
+                router_init_mode=getattr(self.config.model, "router_init_mode", "last"),
+                router_frozen=getattr(self.config.model, "router_frozen", False),
+                router_lr=self.config.model.router_lr,
+                backbone_lr=self.config.model.backbone_lr,
                 tune_llm=self.config.model.tune_llm,
                 tune_visual=self.config.model.tune_visual,
                 tune_projector=self.config.model.tune_projector,

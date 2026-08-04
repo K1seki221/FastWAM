@@ -100,6 +100,14 @@ class Gr00tN1d7Config(PretrainedConfig):
     # Dedicated LR for router params (logits + per-candidate norms); None =>
     # use the base learning rate.
     router_lr: float | None = 1e-3
+    # Per-module LR for the VLM backbone (StarVLA-style: VLM slower than the
+    # action side). None = backbone uses the base learning rate.
+    backbone_lr: float | None = None
+    # Router init: "last" biases the final candidate (GR00T incumbent);
+    # "span" biases block-span i toward candidate i (iron_vla depth-aligned).
+    router_init_mode: str = "last"
+    # Freeze router logits => fixed (hard) mapping arm.
+    router_frozen: bool = False
 
     diffusion_model_cfg: dict = field(
         default_factory=lambda: {

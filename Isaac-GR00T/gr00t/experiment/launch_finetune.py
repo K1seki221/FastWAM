@@ -84,6 +84,15 @@ if __name__ == "__main__":
     config.model.router_candidate_layers = ft_config.router_candidate_layers
     config.model.router_init_bias = ft_config.router_init_bias
     config.model.router_lr = ft_config.router_lr
+    config.model.backbone_lr = ft_config.backbone_lr
+    config.model.router_init_mode = ft_config.router_init_mode
+    config.model.router_frozen = ft_config.router_frozen
+    if ft_config.select_layer is not None:
+        config.model.select_layer = ft_config.select_layer
+    if ft_config.backbone_embedding_dim is not None:
+        config.model.backbone_embedding_dim = ft_config.backbone_embedding_dim
+    if ft_config.dit_num_layers is not None:
+        config.model.diffusion_model_cfg["num_layers"] = ft_config.dit_num_layers
     config.model.random_rotation_angle = ft_config.random_rotation_angle
     config.model.color_jitter_params = ft_config.color_jitter_params
     config.model.use_percentiles = ft_config.use_percentiles
@@ -101,7 +110,11 @@ if __name__ == "__main__":
 
     config.model.load_bf16 = False
     config.model.reproject_vision = False
-    config.model.model_name = "nvidia/Cosmos-Reason2-2B"
+    # GR00T_BACKBONE_PATH: local snapshot dir override. Loading by repo id makes
+    # transformers 4.57.3 tokenizer loading call HfApi.model_info (network) via
+    # _patch_mistral_regex, which raises under HF_HUB_OFFLINE=1; a local path
+    # short-circuits that check entirely.
+    config.model.model_name = os.environ.get("GR00T_BACKBONE_PATH", "nvidia/Cosmos-Reason2-2B")
     config.model.backbone_trainable_params_fp32 = True
     config.model.use_relative_action = True
 

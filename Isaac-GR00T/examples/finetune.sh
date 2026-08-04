@@ -148,7 +148,7 @@ LAUNCH_CMD=(
     --num_gpus "$NUM_GPUS"
     --output_dir "$OUTPUT_DIR"
     --save_steps "$SAVE_STEPS"
-    --save_total_limit 5
+    --save_total_limit "${SAVE_TOTAL_LIMIT:-5}"
     --max_steps "$MAX_STEPS"
     --warmup_ratio 0.05
     --weight_decay 1e-5

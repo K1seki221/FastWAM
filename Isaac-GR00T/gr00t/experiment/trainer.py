@@ -172,17 +172,31 @@ class Gr00tTrainer(Trainer):
         weight_decay 0. Covers both the plain and DeepSpeed (no-optimizer-in-
         ds-config) paths."""
         opt_model = self.model_wrapped if self.model_wrapped is not None else self.model
+
+        def is_backbone(name):  # wrapper-prefix tolerant (e.g. DeepSpeed module.)
+            return name.split("module.")[-1].startswith("backbone.")
+
         router_named = [
             (n, p)
             for n, p in opt_model.named_parameters()
             if "condition_router" in n and p.requires_grad
         ]
-        if self.optimizer is not None or not router_named:
+        backbone_lr = getattr(opt_model.config, "backbone_lr", None)
+        backbone_named = (
+            [
+                (n, p)
+                for n, p in opt_model.named_parameters()
+                if is_backbone(n) and "condition_router" not in n and p.requires_grad
+            ]
+            if backbone_lr is not None
+            else []
+        )
+        if self.optimizer is not None or (not router_named and not backbone_named):
             return super().create_optimizer()
 
         from transformers.trainer import Trainer as HFTrainer
 
-        router_names = {n for n, _ in router_named}
+        special = {n for n, _ in router_named} | {n for n, _ in backbone_named}
         decay_parameters = set(self.get_decay_parameter_names(opt_model))
         router_lr = getattr(opt_model.config, "router_lr", None) or self.args.learning_rate
         optimizer_grouped_parameters = [
@@ -190,7 +204,7 @@ class Gr00tTrainer(Trainer):
                 "params": [
                     p
                     for n, p in opt_model.named_parameters()
-                    if n in decay_parameters and n not in router_names and p.requires_grad
+                    if n in decay_parameters and n not in special and p.requires_grad
                 ],
                 "weight_decay": self.args.weight_decay,
             },
@@ -198,22 +212,40 @@ class Gr00tTrainer(Trainer):
                 "params": [
                     p
                     for n, p in opt_model.named_parameters()
-                    if n not in decay_parameters and n not in router_names and p.requires_grad
+                    if n not in decay_parameters and n not in special and p.requires_grad
                 ],
                 "weight_decay": 0.0,
             },
-            {
-                "params": [p for _, p in router_named],
-                "weight_decay": 0.0,
-                "lr": router_lr,
-            },
         ]
+        if backbone_named:
+            optimizer_grouped_parameters += [
+                {
+                    "params": [p for n, p in backbone_named if n in decay_parameters],
+                    "weight_decay": self.args.weight_decay,
+                    "lr": backbone_lr,
+                },
+                {
+                    "params": [p for n, p in backbone_named if n not in decay_parameters],
+                    "weight_decay": 0.0,
+                    "lr": backbone_lr,
+                },
+            ]
+        if router_named:
+            optimizer_grouped_parameters.append(
+                {
+                    "params": [p for _, p in router_named],
+                    "weight_decay": 0.0,
+                    "lr": router_lr,
+                }
+            )
+        optimizer_grouped_parameters = [g for g in optimizer_grouped_parameters if g["params"]]
         optimizer_cls, optimizer_kwargs = HFTrainer.get_optimizer_cls_and_kwargs(
             self.args, opt_model
         )
         self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
         logging.info(
-            f"create_optimizer: router group with {len(router_named)} params at lr={router_lr}"
+            f"create_optimizer: router group {len(router_named)} params at lr={router_lr}; "
+            f"backbone group {len(backbone_named)} params at lr={backbone_lr}"
         )
         return self.optimizer
 
@@ -374,5 +406,51 @@ class Gr00tTrainer(Trainer):
                     gt_sample,
                     pred_sample,
                 )
+
+        # --------------------------------------------------------------
+        # Condition-router mixture logging (RouterLLM/*, iron_vla TB naming)
+        # --------------------------------------------------------------
+        if not getattr(self, "_router_probe_done", False):
+            self._router_probe_done = True
+            logging.warning(
+                "router-log probe: gs=%s logging_steps=%s local_rank=%s training=%s has_router=%s",
+                self.state.global_step,
+                self.args.logging_steps,
+                self.args.local_rank,
+                getattr(model, "training", "?"),
+                getattr(getattr(self.model, "action_head", None), "condition_router", None) is not None,
+            )
+        if (
+            self.state.global_step % self.args.logging_steps == 0
+            and model.training
+            and self.args.local_rank in (-1, 0)
+        ):
+            try:
+                # Read stats straight from the module: mixture_stats() is
+                # input-independent (softmax of the logits Parameter), and the
+                # forward returns a BatchFeature (UserDict, NOT a dict subclass)
+                # whose extra keys are awkward to reach generically.
+                router = getattr(getattr(self.model, "action_head", None), "condition_router", None)
+                if router is not None:
+                    stats = router.mixture_stats()
+                    rw = stats["router_weights"]
+                    rent = stats["router_entropy"]
+                    cfg = self.model.config
+                    cands = getattr(cfg, "router_candidate_layers", None) or list(
+                        range(getattr(cfg, "select_layer", 12) + 1)
+                    )
+                    w = rw.detach().float().cpu()  # [num_cross_blocks, K]
+                    logs = {
+                        f"RouterLLM/w_mean_L{layer:02d}": w[:, k].mean().item()
+                        for k, layer in enumerate(cands)
+                    }
+                    # per-block incumbent extremes: which block leaves the stock tap first
+                    logs["RouterLLM/w_incumbent_min"] = w[:, -1].min().item()
+                    logs["RouterLLM/w_incumbent_mean"] = w[:, -1].mean().item()
+                    if rent is not None:
+                        logs["RouterLLM/entropy"] = float(rent)
+                    self.log(logs)
+            except Exception:  # diagnostics must never kill a training step
+                logging.warning("router-stats logging failed", exc_info=True)
 
         return (loss, outputs) if return_outputs else loss

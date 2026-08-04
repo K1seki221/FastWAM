@@ -75,6 +75,12 @@ class FinetuneConfig:
     """Softmax logit bias on the incumbent (deepest) candidate at init."""
 
     router_lr: float | None = 1e-3
+    backbone_lr: float | None = None
+    router_init_mode: str = "last"
+    router_frozen: bool = False
+    select_layer: int | None = None
+    backbone_embedding_dim: int | None = None
+    dit_num_layers: int | None = None
     """Dedicated learning rate for router params; None = base learning rate."""
 
     # --- Data Augmentation ---

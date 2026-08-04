@@ -9,7 +9,10 @@ LIBERO_REPO="$SCRIPT_DIR/../../../../external_dependencies/LIBERO"
 PROJECT_REPO="$SCRIPT_DIR/../../../.."
 LIBERO_UV_ENV="$SCRIPT_DIR/libero_uv"
 
-git submodule update --init $LIBERO_REPO
+# Vendored tree has no submodule index; tolerate a pre-provisioned clone.
+if [ ! -f "$LIBERO_REPO/requirements.txt" ]; then
+  git submodule update --init $LIBERO_REPO
+fi
 
 # python -m pip install cmake==3.18.4
 rm -rf $LIBERO_UV_ENV
