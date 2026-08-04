@@ -27,13 +27,16 @@ FORWARD_VARS=(
   FUYAO_USER REPO_ROOT GROOT VENV_DIR DATA_ROOT RUNS_ROOT
   SUITE RUN_NAME NUM_GPUS MAX_STEPS GLOBAL_BATCH_SIZE SAVE_STEPS
   USE_ROUTER ROUTER_LR ROUTER_LAYERS EXTRA_ARGS
-  WANDB_API_KEY WANDB_MODE HF_TOKEN HF_HUB_OFFLINE HF_HOME
+  WANDB_API_KEY WANDB_MODE HF_TOKEN HF_HUB_OFFLINE GROOT_HF_HOME GR00T_BACKBONE_PATH
+  CKPT SUITES N_EPISODES N_ENVS MAX_STEPS N_ACTION_STEPS PORT EVAL_OUT SKIP_APT_INSTALL
+  DATASET_PATH DATASET_GLOB EMBODIMENT_TAG
+  SAVE_TOTAL_LIMIT
 )
 job_cmd=()
 for var in "${FORWARD_VARS[@]}"; do
   [[ -n "${!var:-}" ]] && job_cmd+=("${var}=$(printf '%q' "${!var}")")
 done
-job_cmd+=("NUM_GPUS=$nproc" bash "${REPO_ROOT}/scripts/groot_fuyao_train.sh")
+job_cmd+=("NUM_GPUS=$nproc" bash "${REPO_ROOT}/scripts/${RUNNER:-groot_fuyao_train.sh}")
 
 deploy_cmd=(
   fuyao deploy
@@ -52,4 +55,18 @@ printf '[submit-groot] command:'; printf ' %s' "${deploy_cmd[@]}"; printf '\n'
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then echo "[submit-groot] DRY_RUN=1; not submitted"; exit 0; fi
 command -v fuyao >/dev/null 2>&1 || die "fuyao CLI not found on this machine"
+
+# fuyao packs the submit-time cwd as the job artifact, but our job command
+# references the persistent /dataset_rc checkout by absolute path — the
+# snapshot is dead weight. Submitting from the repo also trips the >500 MiB
+# interactive size prompt once in-repo wandb data accumulates (live jobs run
+# with cwd inside Isaac-GR00T). Submit from a tiny provenance-only dir instead.
+submit_dir="$(mktemp -d /tmp/groot_submit.XXXXXX)"
+{
+  echo "artifact placeholder — job code lives at $REPO_ROOT (see job_cmd)"
+  echo "submitted_at: $(date -Iseconds)"
+  git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null | sed "s/^/git_head: /"
+  git -C "$REPO_ROOT" status --short 2>/dev/null | sed "s/^/dirty: /"
+} > "$submit_dir/PROVENANCE.txt" || true
+cd "$submit_dir"
 exec "${deploy_cmd[@]}"

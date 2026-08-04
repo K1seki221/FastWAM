@@ -13,10 +13,24 @@ RUNS_ROOT="${RUNS_ROOT:-/dataset_rc/${FUYAO_USER}/projects/groot_runs}"
 
 # HF cache on the user's own /dataset_rc (always mounted in jobs);
 # weights pre-downloaded -> offline by default.
-export HF_HOME="${HF_HOME:-/dataset_rc/${FUYAO_USER}/hf}"
+# Hard-pin: job containers pre-set HF_HOME=/dataset_rc/hf (no user segment), which
+# broke the pre-flight (bifrost-2026073102171101). Override via GROOT_HF_HOME only.
+export HF_HOME="${GROOT_HF_HOME:-/dataset_rc/${FUYAO_USER}/hf}"
 export HF_HUB_CACHE="$HF_HOME/hub"   # containers may pre-set HF_HUB_CACHE, which outranks HF_HOME
 [[ -d "$HF_HOME/hub/models--nvidia--GR00T-N1.7-3B" ]] \
   || { echo "GR00T-N1.7-3B not in $HF_HOME/hub — copy the model caches there first" >&2; exit 1; }
+# Point the Cosmos backbone at its local snapshot: repo-id loading needs a hub
+# API call in transformers 4.57.3 (tokenizer mistral-regex probe) that raises
+# under HF_HUB_OFFLINE=1 (killed bifrost-2026073102591700).
+cosmos_repo="$HF_HOME/hub/models--nvidia--Cosmos-Reason2-2B"
+if [[ -f "$cosmos_repo/refs/main" ]]; then
+  cosmos_snap="$cosmos_repo/snapshots/$(cat "$cosmos_repo/refs/main")"
+else
+  cosmos_snap="$(ls -d "$cosmos_repo/snapshots"/* 2>/dev/null | head -1)"
+fi
+[[ -f "$cosmos_snap/tokenizer.json" ]] \
+  || { echo "Cosmos-Reason2-2B snapshot incomplete/missing under $cosmos_repo" >&2; exit 1; }
+export GR00T_BACKBONE_PATH="${GR00T_BACKBONE_PATH:-$cosmos_snap}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 
@@ -39,9 +53,36 @@ else
   export USE_WANDB=0
 fi
 
-dataset="$DATA_ROOT/libero_${SUITE}_no_noops_1.0.0_lerobot"
-[[ -d "$dataset" ]] || { echo "dataset not found: $dataset" >&2; exit 1; }
-[[ -f "$dataset/meta/modality.json" ]] || { echo "missing $dataset/meta/modality.json" >&2; exit 1; }
+# DATASET_PATH: explicit os.pathsep-joined dataset dirs (overrides SUITE);
+# DATASET_GLOB: expand a glob of dataset dirs (e.g. ".../gr1_unified/gr1_unified.*").
+# EMBODIMENT_TAG selects the embodiment (default LIBERO_PANDA).
+EMBODIMENT_TAG="${EMBODIMENT_TAG:-LIBERO_PANDA}"
+if [[ -n "${DATASET_GLOB:-}" ]]; then
+  dataset=""
+  for d in $DATASET_GLOB; do
+    [[ -d "$d" ]] || continue
+    [[ -f "$d/meta/modality.json" ]] || { echo "missing $d/meta/modality.json" >&2; exit 1; }
+    dataset="${dataset:+$dataset:}$d"
+  done
+  [[ -n "$dataset" ]] || { echo "DATASET_GLOB matched nothing: $DATASET_GLOB" >&2; exit 1; }
+  echo "[groot] DATASET_GLOB matched $(echo "$dataset" | tr ':' '\n' | wc -l) dirs"
+elif [[ -n "${DATASET_PATH:-}" ]]; then
+  dataset="$DATASET_PATH"
+# SUITE=all -> StarVLA-style joint training on the 4 standard suites
+# (finetune.sh --dataset-path accepts os.pathsep-joined dirs).
+elif [[ "$SUITE" == "all" ]]; then
+  dataset=""
+  for s in spatial object goal 10; do
+    d="$DATA_ROOT/libero_${s}_no_noops_1.0.0_lerobot"
+    [[ -d "$d" ]] || { echo "dataset not found: $d" >&2; exit 1; }
+    [[ -f "$d/meta/modality.json" ]] || { echo "missing $d/meta/modality.json" >&2; exit 1; }
+    dataset="${dataset:+$dataset:}$d"
+  done
+else
+  dataset="$DATA_ROOT/libero_${SUITE}_no_noops_1.0.0_lerobot"
+  [[ -d "$dataset" ]] || { echo "dataset not found: $dataset" >&2; exit 1; }
+  [[ -f "$dataset/meta/modality.json" ]] || { echo "missing $dataset/meta/modality.json" >&2; exit 1; }
+fi
 if [[ ! -x "$VENV_DIR/bin/python" ]]; then
   if [[ -x "$GROOT/.venv/bin/python" ]]; then
     VENV_DIR="$GROOT/.venv"   # legacy in-repo venv fallback
@@ -66,7 +107,7 @@ echo "[groot] suite=$SUITE run=$RUN_NAME gpus=$NUM_GPUS steps=$MAX_STEPS batch=$
 exec bash examples/finetune.sh \
   --base-model-path nvidia/GR00T-N1.7-3B \
   --dataset-path "$dataset/" \
-  --embodiment-tag LIBERO_PANDA \
+  --embodiment-tag "$EMBODIMENT_TAG" \
   --output-dir "$RUNS_ROOT/$RUN_NAME" \
   --state-dropout-prob 0.2 \
   "${router_args[@]}"
