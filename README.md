@@ -13,6 +13,15 @@ Official codebase for **Fast-WAM: Do World Action Models Need Test-time Future I
 
 This repository contains the training and evaluation code for FastWAM on LIBERO / RoboTwin.
 
+> **Fork note — GR00T condition-router research.** This fork additionally hosts
+> our condition-router work inside the vendored `Isaac-GR00T/` tree: a learned
+> per-DiT-block softmax router over candidate VLM layers (plus a frozen
+> fixed-mapping control), supporting both the stock Cosmos-Reason2-2B backbone
+> and a full-depth Qwen3-VL-4B (36-layer) variant. Start with
+> [`cc_memo/13_local_training_and_profile.md`](cc_memo/13_local_training_and_profile.md)
+> for local launch commands and the measured training profile; design notes and
+> cluster runbooks live in [`cc_memo/`](cc_memo/).
+
 ## Index
 
 - [File Structure](#file-structure)

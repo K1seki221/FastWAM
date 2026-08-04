@@ -247,3 +247,9 @@ onelogger.log
 !Isaac-GR00T/**/*.txt
 !Isaac-GR00T/**/*.pt
 Isaac-GR00T/.venv/
+
+# vendored sim assets + eval venvs (GBs; provisioned per-machine, see cc_memo/12)
+Isaac-GR00T/external_dependencies/
+Isaac-GR00T/gr00t/eval/sim/LIBERO/libero_uv/
+**/robocasa_uv/
+**/libero_uv/
