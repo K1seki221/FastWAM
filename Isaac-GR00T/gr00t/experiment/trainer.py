@@ -536,6 +536,10 @@ class Gr00tTrainer(Trainer):
                     logs["RouterLLM/w_incumbent_mean"] = w[:, -1].mean().item()
                     if rent is not None:
                         logs["RouterLLM/entropy"] = float(rent)
+                    if stats.get("router_sqrt_sum_w2") is not None:
+                        logs["RouterLLM/sqrt_sum_w2"] = float(stats["router_sqrt_sum_w2"])
+                    if stats.get("router_mix_rms") is not None:
+                        logs["RouterLLM/rms_mix"] = float(stats["router_mix_rms"])
                     self.log(logs)
             except Exception:  # diagnostics must never kill a training step
                 logging.warning("router-stats logging failed", exc_info=True)

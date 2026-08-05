@@ -91,13 +91,25 @@ class ConditionRouter(nn.Module):
         if self.mix_renorm:
             scale = weights.pow(2).sum(dim=-1).clamp_min(1e-9).rsqrt()  # [N]
             mixed = mixed * scale.view(1, -1, 1, 1)
+        # Actual conditioning loudness (post-rescale if enabled): lets curves
+        # separate "which layers" from "how loud" (mix of unit-RMS candidates
+        # shrinks toward sqrt(sum w^2) as entropy rises).
+        with torch.no_grad():
+            self._last_mix_rms = mixed.detach().float().pow(2).mean(dim=-1).sqrt().mean()
         return mixed
 
     @torch.no_grad()
     def mixture_stats(self) -> dict[str, torch.Tensor]:
         w = self.logits.softmax(dim=-1)  # [N, K]
         entropy = -(w * (w + 1e-9).log()).sum(dim=-1)  # [N]
-        return {"router_weights": w.detach(), "router_entropy": entropy.mean().detach()}
+        return {
+            "router_weights": w.detach(),
+            "router_entropy": entropy.mean().detach(),
+            # sqrt(sum w^2): the decorrelated-candidates prediction for the
+            # mixture RMS (1 at one-hot, 1/sqrt(K) at uniform).
+            "router_sqrt_sum_w2": w.pow(2).sum(dim=-1).sqrt().mean().detach(),
+            "router_mix_rms": getattr(self, "_last_mix_rms", None),
+        }
 
 
 class Gr00tN1d7ActionHead(nn.Module):
