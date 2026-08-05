@@ -61,6 +61,7 @@ esac
 name="$name${PILOT_SUFFIX:-}"
 gpu="${PILOT_GPU:-$gpu}"
 port="${PILOT_PORT:-$port}"
+rlr="${PILOT_ROUTER_LR:-$rlr}"
 # ROUTER_PCPROJ=1 => per-candidate identity-init proj adapters (v1.5-lite)
 [[ "${ROUTER_PCPROJ:-0}" == "1" && "$use_router" == "1" ]] && init="$init --router-candidate-proj"
 

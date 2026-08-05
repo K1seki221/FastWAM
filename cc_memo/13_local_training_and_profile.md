@@ -137,6 +137,14 @@ as "no router" anchors. Replaced by Arm Z = `pilot_Z_stock` (GPU 2, port
 select_layer-28 tap through vlln, no candidate norms, no adapters. Z-vs-C
 would isolate adapter capacity; Z-vs-learned-arms = "router vs stock".
 A/C partial curves (to ~7K) remain on wandb (gpwc160z / jwnldrta).
+Arm A_hard = `pilot_A_fixed_span_hard` (GPU 5, port 29521): the MINIMAL
+hard-wired depth-aligned baseline — frozen span logits (= hard wiring; no
+router-free code path can express per-block taps), NO pcproj adapters,
+per-tap norms at BASE lr 1e-4 (`PILOT_ROUTER_LR` launcher knob) so they
+train exactly like Z's vlln. Capacity over Z: only 4 LayerNorms vs 1 (16K
+params). Decomposition: Z vs A_hard = mapping; A_hard vs B = mapping +
+capacity + learnability; old A_pcproj (7K curve) fills the capacity-matched
+learnability contrast if needed.
 
 Arm H = `pilot_H_uniform_k4_mixnorm_pcproj` (GPU 0, port 29528): B_pcproj plus
 NEW flag `--router-mix-renorm` — mixture rescaled by 1/sqrt(sum w^2), which
