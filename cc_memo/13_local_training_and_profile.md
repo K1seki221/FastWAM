@@ -119,6 +119,11 @@ coef annealed linearly to 0 over max_steps (explore-then-commit). Computed in
 Gr00tTrainer.compute_loss straight from the logits (static router => no
 forward plumbing); zero gradient at exact uniform, restoring force once
 weights drift, force fades as coef anneals. Unit-checked both properties.
+LOGGING (since 2nd G launch; first G killed at ~2.7K for this): "loss"
+(wandb train/loss) = pure TASK loss, directly comparable across arms;
+"loss_with_entropy_bonus" = optimized objective; "router_entropy_bonus" =
+coef(t)*H. Implemented via window accumulators in compute_loss + override in
+Gr00tTrainer.log().
 NOTE: measured VLM layer-norm scales (text probe, Qwen3-VL-2B): L1 15, L7 852,
 L14 949, L21 1527, L27 3371, L28 2452 — 159x spread over pool 1..28; the
 per-candidate LayerNorms are load-bearing (esp. arm D). Watch norm/proj gains

@@ -301,6 +301,16 @@ class Gr00tTrainer(Trainer):
         return self.optimizer
 
     def log(self, logs: dict[str, float], start_time: Optional[float] = None) -> None:
+        # Entropy-bonus arms: report the pure task loss as "loss" so
+        # train/loss is comparable across arms; the optimized objective and
+        # the bonus itself get their own metrics.
+        s = getattr(self, "_entropy_log_state", None)
+        if s and s["n"] > 0 and "loss" in logs:
+            n = s["n"]
+            logs["loss"] = round(s["task"] / n, 4)
+            logs["loss_with_entropy_bonus"] = round(s["total"] / n, 4)
+            logs["router_entropy_bonus"] = round(s["bonus"] / n, 6)
+            self._entropy_log_state = {"task": 0.0, "total": 0.0, "bonus": 0.0, "n": 0}
         # Hide epoch from logged metrics as it's misleading for Iterable datasets.
         epoch = self.state.epoch
         self.state.epoch = None
@@ -428,8 +438,20 @@ class Gr00tTrainer(Trainer):
                 anneal = max(0.0, 1.0 - self.state.global_step / max(1, self.args.max_steps))
                 w = router.logits.softmax(dim=-1)
                 entropy = -(w * (w + 1e-9).log()).sum(dim=-1).mean()
-                loss = loss - coef0 * anneal * entropy
+                bonus = coef0 * anneal * entropy
+                task_loss = float(loss.detach())
+                loss = loss - bonus
                 self.loss = loss
+                # Window accumulators: log() reports the TASK loss as "loss"
+                # (wandb train/loss, comparable across arms) and the bonused
+                # objective / bonus as separate metrics.
+                s = getattr(self, "_entropy_log_state", None)
+                if s is None:
+                    s = self._entropy_log_state = {"task": 0.0, "total": 0.0, "bonus": 0.0, "n": 0}
+                s["task"] += task_loss
+                s["total"] += float(loss.detach())
+                s["bonus"] += float(bonus.detach())
+                s["n"] += 1
 
         # --------------------------------------------------------------
         # Accuracy calculation
