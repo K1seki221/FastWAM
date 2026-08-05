@@ -149,6 +149,32 @@ def _batch_accuracy(
     return accuracy
 
 
+class RouterFreezeDelayCallback(TrainerCallback):
+    """Withhold condition-router logit updates for the first N optimizer steps.
+
+    A uniform-init router at high LR co-adapts against a still-random DiT
+    ("students choosing teachers before they can read"). Dropping the logit
+    grads pre-optimizer-step keeps the logits in the optimizer's router group
+    (unlike requires_grad=False, which would exclude them at create_optimizer
+    time) and releases them exactly at ``freeze_steps``.
+    """
+
+    def __init__(self, logit_params: list, freeze_steps: int):
+        self.logit_params = logit_params
+        self.freeze_steps = freeze_steps
+        self._released = False
+
+    def on_pre_optimizer_step(self, args, state, control, **kwargs):
+        if state.global_step < self.freeze_steps:
+            for p in self.logit_params:
+                p.grad = None
+        elif not self._released:
+            logging.warning(
+                f"router-freeze-delay: logits released at global_step={state.global_step}"
+            )
+            self._released = True
+
+
 class Gr00tTrainer(Trainer):
     """Trainer that bypasses torch dataloader and makes data collator async."""
 
@@ -165,6 +191,18 @@ class Gr00tTrainer(Trainer):
         self.action_offset = kwargs.pop("action_offset", None)
         self.multiprocessing_context = kwargs.pop("multiprocessing_context", "fork")
         super().__init__(*args, **kwargs)
+        freeze_steps = int(getattr(self.model.config, "router_freeze_steps", 0) or 0)
+        if freeze_steps > 0:
+            logit_params = [
+                p
+                for n, p in self.model.named_parameters()
+                if "condition_router" in n and n.endswith("logits")
+            ]
+            if logit_params:
+                self.add_callback(RouterFreezeDelayCallback(logit_params, freeze_steps))
+                logging.warning(
+                    f"router-freeze-delay: logits frozen for first {freeze_steps} optimizer steps"
+                )
 
     def create_optimizer(self):
         """HF default optimizer, plus a dedicated param group for condition-router
@@ -242,6 +280,16 @@ class Gr00tTrainer(Trainer):
         optimizer_cls, optimizer_kwargs = HFTrainer.get_optimizer_cls_and_kwargs(
             self.args, opt_model
         )
+        # ZeRO CPU-offload requires DeepSpeed's AVX CPU Adam (torch AdamW on
+        # offloaded fp32 states is ~10x slower per step and DeepSpeed rejects
+        # it by default via zero_force_ds_cpu_optimizer).
+        if os.environ.get("GROOT_DS_OFFLOAD") == "cpu":
+            from deepspeed.ops.adam import DeepSpeedCPUAdam
+
+            optimizer_cls = DeepSpeedCPUAdam
+            optimizer_kwargs = {
+                k: v for k, v in optimizer_kwargs.items() if k in ("lr", "betas", "eps", "weight_decay")
+            }
         self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
         logging.info(
             f"create_optimizer: router group {len(router_named)} params at lr={router_lr}; "

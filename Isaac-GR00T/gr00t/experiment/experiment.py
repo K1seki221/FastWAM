@@ -256,7 +256,11 @@ def run(config: Config):
     run_on_rank0(processor.save_pretrained, processor_dir, label="processor.save_pretrained")
 
     # deepspeed config
-    if config.training.num_gpus > 1 and not config.training.use_ddp:
+    # GROOT_FORCE_DEEPSPEED=1 enables DeepSpeed on a single GPU (normally
+    # disabled), so ZeRO CPU-offload can hold the optimizer state of models
+    # whose fp32 Adam state alone exceeds GPU memory (6B tune-all on 94GB).
+    force_deepspeed = os.environ.get("GROOT_FORCE_DEEPSPEED") == "1"
+    if (config.training.num_gpus > 1 or force_deepspeed) and not config.training.use_ddp:
         deepspeed_config = config.get_deepspeed_config()
     else:
         deepspeed_config = None

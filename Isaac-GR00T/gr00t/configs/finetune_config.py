@@ -78,6 +78,10 @@ class FinetuneConfig:
     backbone_lr: float | None = None
     router_init_mode: str = "last"
     router_frozen: bool = False
+    router_freeze_steps: int = 0
+    """Withhold router-logit updates for the first N optimizer steps (0 = off).
+    Scale with total steps (e.g. 5%, matching warmup_ratio): lets a from-scratch
+    DiT settle before the router starts choosing layers."""
     select_layer: int | None = None
     backbone_embedding_dim: int | None = None
     dit_num_layers: int | None = None

@@ -16,6 +16,7 @@
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 import json
+import os
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -163,6 +164,15 @@ class Config:
             config = json.load(open(gr00t_dir / "configs/deepspeed/zero3_config.json"))
         else:
             raise ValueError(f"Invalid DeepSpeed stage: {stage}")
+
+        # GROOT_DS_OFFLOAD=cpu moves optimizer state + Adam step to host RAM
+        # (fp32 master/m/v for 6B params ~72GB). Pairs with DeepSpeedCPUAdam
+        # in Gr00tTrainer.create_optimizer.
+        if os.environ.get("GROOT_DS_OFFLOAD") == "cpu":
+            config["zero_optimization"]["offload_optimizer"] = {
+                "device": "cpu",
+                "pin_memory": True,
+            }
 
         return config
 

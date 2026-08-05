@@ -46,8 +46,9 @@ ROUTER_LR="${ROUTER_LR:-1e-3}"
 ROUTER_LAYERS="${ROUTER_LAYERS:-}"         # e.g. "0 6 12"; empty = all
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
-# wandb: on iff a key is provided or offline mode requested
-if [[ -n "${WANDB_API_KEY:-}" || "${WANDB_MODE:-}" == "offline" ]]; then
+# wandb: on iff a key is provided, offline mode requested, or an explicit
+# WANDB_MODE=online (local boxes with a ~/.netrc login need no key in env).
+if [[ -n "${WANDB_API_KEY:-}" || "${WANDB_MODE:-}" == "offline" || "${WANDB_MODE:-}" == "online" ]]; then
   export USE_WANDB=1
 else
   export USE_WANDB=0

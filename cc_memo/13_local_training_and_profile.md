@@ -38,6 +38,88 @@ Total params: stock ≈ 3.2B; Qwen36 = **6.02B** (4B VLM + 1.26B DiT + heads).
 - Datasets: LeRobot v2 + GR00T `meta/modality.json`. All videos must be H264
   (job-image ffmpeg cannot decode some AV1; convert losslessly with `-qp 0`).
 
+## UCSB box provisioning (2026-08-04, verified)
+
+Everything large lives under `/data/ruijiezhang/` (28T volume). GPUs: use
+**4–7 only** (94GB H100 NVL; 0–3 belong to others). Direct huggingface.co
+access works — no mirror gymnastics needed.
+
+| what | where |
+|---|---|
+| venv (uv sync of `Isaac-GR00T/`, torch 2.9.0+cu128) | `/data/ruijiezhang/env/groot` → pass as `VENV_DIR` |
+| HF cache (GR00T-N1.7-3B, Cosmos-Reason2-2B, Qwen3-VL-4B-Instruct @ebb281ec) | `/data/ruijiezhang/hf/hf_cache` → pass as `GROOT_HF_HOME` |
+| gr1_unified corpus (24 dirs, 42GB, PREPPED: dtype+stats+rel_stats done, all H264) | `/data/ruijiezhang/gr1_unified` → `DATASET_GLOB="/data/ruijiezhang/gr1_unified/gr1_unified.*"` |
+| LIBERO 4 suites (modality.json + ep82 patch applied) | `/data/ruijiezhang/libero` → pass as `DATA_ROOT` |
+| runs | `/data/ruijiezhang/groot_runs` → pass as `RUNS_ROOT` |
+| uv wheel cache | `/data/ruijiezhang/uv_cache` (`UV_CACHE_DIR`) |
+
+### Local 4-arm Qwen28 experiment (launched 2026-08-04)
+
+Arch "Qwen28": Qwen3-VL-**2B** (28 layers, hidden 2048 — same width as Cosmos),
+28L DiT from scratch -> 14 cross blocks, tune-all (~3.2B), fits ONE 94GB H100
+natively (73GB peak @ micro 16) — no offload needed. Effective batch 512
+(16 micro x 32 accum), 60K steps, router lr **2e-3** all arms, backbone 1e-5.
+Measured 8.46 s/step -> ~5.9 days/arm. wandb: kiseki_rigel/finetune-gr00t-n1d7.
+
+| arm | GPU | flags |
+|---|---|---|
+| A `qwen28_A_fixed_span` | 5 | span, bias 16, frozen — hard depth-aligned quarters {7,14,21,28} |
+| B `qwen28_B_uniform_k4` | 7 | span, bias **0** = exact uniform over {7,14,21,28}, learnable |
+| C `qwen28_C_fixed_last` | 4 | last, bias 16, frozen — all blocks read layer 28 (stock incumbent) |
+| D `qwen28_D_uniform_k28` | 6 | bias 0 uniform over ALL layers 1..28 (K=28), learnable |
+
+All four run in PARALLEL (GPUs 4-7 freed up mid-session). Launchers:
+`/data/ruijiezhang/groot_runs/launch_gpu{5,7}.sh` (A/B; their queued 2nd legs
+were detached by killing the wrapper bash — trainers reparented to init) and
+`launch_gpu4_C.sh` / `launch_gpu6_D.sh`. Exit codes -> `chain_gpu{4,5,6,7}.status`.
+
+**2026-08-05: full runs PAUSED at complete checkpoint-6000** (all four) to run
+a fast pilot phase first. Resume later with `--resume-from-checkpoint` via
+finetune.sh (add to EXTRA_ARGS is NOT enough — it's a first-class flag:
+`bash examples/finetune.sh ... --resume-from-checkpoint`; runner passthrough
+needs EXTRA_ARGS="--resume_from_checkpoint" tyro form) + reattach wandb with
+`WANDB_RUN_ID=<id> WANDB_RESUME=must` (ids: A=jf6re4z4 B=24bwkudf C=af5j0nnq
+D=kwqwmjrn). Loss curves to 6K: all four ~indistinguishable (expected — router
+effects are small vs early-training dynamics).
+
+### Pilot phase (launched 2026-08-05, ~12h)
+
+Five arms as `pilot_*` runs via `/data/ruijiezhang/groot_runs/launch_pilot.sh A|B|C|D|E`:
+6-task PnP subset (`DATASET_GLOB=.../gr1_unified.PnP*`, 6k episodes), 10K steps
+@ eff batch 256 (16x16) ≈ 2.3 epochs, save 2500/limit 2, ports 29521-25, GPU map
+A=5 B=7 C=4 D=6 E=3 (user granted GPU 3 mid-session). Purpose: fast idea
+verification (loss separation + routing structure) before the 6-day full runs.
+Arm E = `pilot_E_uniform_k4_baselr`: same as B but ROUTER_LR=1e-4 (= DiT base
+lr, i.e. no 20x router-LR boost) — isolates the router-LR choice.
+**Arms E and F were killed at ~step 400-500 on user request (2026-08-05)** —
+GPUs 2/3 released; the LR and freeze-delay ablations remain open questions.
+Core pilots = A-D only.
+Arm F = `pilot_F_uniform_k4_freeze500` (GPU 2, port 29526): same as B plus NEW
+flag `--router-freeze-steps 500` (5% of steps, scale with budget) — logit grads
+dropped pre-optimizer-step for the first N steps ("let the DiT settle before
+the router chooses layers"), then released. Implemented 2026-08-05:
+`RouterFreezeDelayCallback` in gr00t/experiment/trainer.py (grad-drop keeps
+logits in the optimizer group; requires_grad=False would exclude them at
+create_optimizer). Wired through finetune_config -> launch_finetune -> model
+config, mirroring router_lr. Verify in logs: "router-freeze-delay: logits
+frozen for first N" at start, "released at global_step=N" when opened;
+RouterLLM curves must stay exactly uniform until N.
+NOTE init change vs fuyao pairs: learned arms start UNIFORM (not span-87%).
+
+Env quirks this box (all baked into the launchers):
+- torchcodec needs conda FFmpeg 7: `LD_LIBRARY_PATH=/data/ruijiezhang/env/ffmpeg7/lib`
+  AND `LD_PRELOAD=/data/ruijiezhang/env/ffmpeg7/lib/libstdc++.so.6` — the venv's
+  python is miniconda-based and its RPATH drags in an ancient libstdc++ otherwise.
+- Single-GPU DeepSpeed+CPU-offload machinery exists if ever needed again:
+  `GROOT_FORCE_DEEPSPEED=1 GROOT_DS_OFFLOAD=cpu` (env-gated patches in
+  experiment.py / base_config.py / trainer.py / finetune.sh) — unused for 2B.
+
+`scripts/prep_gr1_unified.py` (this repo) = one-shot gr1_unified prep:
+manifest completeness gate → info.json dtype fix (object→float64) → metadata
+repair → stats+rel-stats regen with asserts → H264 fourcc sweep. Idempotent;
+re-run after re-downloading anything. Remote manifest cached at
+`/data/ruijiezhang/gr1_unified/.remote_manifest.json`.
+
 ## Local launch (single GPU)
 
 Everything goes through `scripts/groot_fuyao_train.sh` (works on any box with a

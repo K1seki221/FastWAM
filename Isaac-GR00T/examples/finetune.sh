@@ -217,6 +217,10 @@ if [ "$NUM_GPUS" = "1" ]; then
     # Restrict to a single GPU so HF Trainer doesn't wrap the model in DataParallel,
     # which crashes with a StopIteration error in the model's device property.
     export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+    if [ "${GROOT_FORCE_DEEPSPEED:-0}" = "1" ]; then
+        # DeepSpeed needs an initialized process group even at world size 1.
+        exec torchrun --nproc_per_node=1 --master_port="$MASTER_PORT" "${LAUNCH_CMD[@]}"
+    fi
     exec python "${LAUNCH_CMD[@]}"
 fi
 

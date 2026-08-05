@@ -108,6 +108,9 @@ class Gr00tN1d7Config(PretrainedConfig):
     router_init_mode: str = "last"
     # Freeze router logits => fixed (hard) mapping arm.
     router_frozen: bool = False
+    # Withhold logit updates for the first N optimizer steps (0 = off); grads
+    # are dropped pre-step so logits stay in the optimizer group throughout.
+    router_freeze_steps: int = 0
 
     diffusion_model_cfg: dict = field(
         default_factory=lambda: {

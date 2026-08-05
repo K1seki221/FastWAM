@@ -87,6 +87,7 @@ if __name__ == "__main__":
     config.model.backbone_lr = ft_config.backbone_lr
     config.model.router_init_mode = ft_config.router_init_mode
     config.model.router_frozen = ft_config.router_frozen
+    config.model.router_freeze_steps = ft_config.router_freeze_steps
     if ft_config.select_layer is not None:
         config.model.select_layer = ft_config.select_layer
     if ft_config.backbone_embedding_dim is not None:
