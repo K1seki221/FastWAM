@@ -1,5 +1,18 @@
 # Condition-router × GR00T N1.7 — integration design (repo mapped 2026-07-28, commit 9c7e746)
 
+> **STATUS (2026-08-05): v1 IMPLEMENTED, TRAINED, EVALUATED** — this file is the
+> design rationale; results and operational state live in `12_groot_fuyao_runbook.md`.
+> Updates vs the plan below: (a) flags added 2026-08-03: `--router-init-mode
+> span|last`, `--router-frozen` (fixed-mapping arm), `--select-layer`,
+> `--backbone-embedding-dim`, `--dit-num-layers`; (b) experiment steps 1-3 DONE —
+> Phase A trained the 4 LIBERO suites JOINTLY (single router, not per-suite):
+> baseline .987, router .990-.994, official anchor .970; LIBERO saturated, decisive
+> test moved to GR1-tabletop (router climbs .239->.318, novel-18 parity at 60K);
+> (c) norm decision RESOLVED: per-candidate LayerNorms with identity init;
+> (d) `select_layer` note superseded: the Qwen3-VL-4B pair (36 layers kept,
+> 36-layer DiT, candidates [9 18 27 36], span init, fixed-vs-learned) was
+> submitted from scratch 2026-08-04 and is pending in queue.
+
 Local clone: `/home/ruijiezhang/Isaac-GR00T`. Full reader reports in session scratchpad (`groot_{model-core,backbone,train-config,data-eval}.md`). All anchors file:line at that commit.
 
 ## Incumbent wiring (what the router replaces)

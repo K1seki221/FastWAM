@@ -1,5 +1,14 @@
 # Condition-router host survey — top VLM+action-DiT frameworks on LIBERO (web survey 2026-07-28)
 
+> **RESOLVED (2026-08).** GR00T N1.7 was chosen and the condition router is
+> implemented, trained, and evaluated in the vendored `Isaac-GR00T` — this file
+> is background survey only. The credibility anchor is DONE and exceeded:
+> stage-1 LIBERO baseline .987 / router arms .990-.994 vs the .970 official
+> finetune anchor. LIBERO proved SATURATED, so the decisive comparison moved to
+> RoboCasa-GR1-tabletop (and the in-flight Qwen3-VL 36-layer pair). See
+> `11_groot_router_design.md` (design), `12_groot_fuyao_runbook.md` (results),
+> `13_local_training_and_profile.md` (how to run).
+
 Goal: pick a well-known VLM + action-DiT framework to host Ruijie's **condition router** (from IronVLA: v1 static = learned per-DiT-block softmax over K candidate VLM layers, identity-initializable; v2 token = per-token `Linear(D→K)` router inside each DiT block mixing K expert attentions; router params in a dedicated high-LR `lr_gate` group). Four-agent web sweep; numbers cross-checked against primary sources.
 
 ## LIBERO landscape (mid-2026)

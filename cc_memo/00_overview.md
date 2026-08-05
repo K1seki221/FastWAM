@@ -4,7 +4,7 @@ Official codebase for **"Fast-WAM: Do World Action Models Need Test-time Future 
 
 **One-sentence idea:** a world action model built on the Wan2.2-TI2V-5B video DiT, where a small action expert and the big video expert share attention in a Mixture-of-Transformers (MoT); in the flagship "uncond" variant the action expert attends only to first-frame (current-observation) video tokens, so at policy time actions are decoded with **no video imagination** — one video-expert prefill into a KV cache, then cheap action-only denoising.
 
-- Git: `origin = https://github.com/K1seki221/FastWAM.git`, branch `main`, ~11 commits, HEAD `45d8e14` (PR #20 "fix_gpu_oom": ckpt `map_location` → cpu).
+- Git: `origin = https://github.com/K1seki221/FastWAM.git`, branch `main` (public at github.com/K1seki221/FastWAM; HEAD moves — was `45d8e14` at audit time (PR #20 "fix_gpu_oom": ckpt `map_location` → cpu).
 - Python package `fastwam` v0.1.0, src-layout (`src/fastwam`), `pip install -e .`. All deps pinned exact (`torch==2.7.1+cu128` — needs the cu128 wheel index). No console entry points; everything runs via `python scripts/*.py`, `bash scripts/*.sh`, `python experiments/...`.
 - Benchmarks: **LIBERO** (mujoco 3.3.2, must match the released data — dir is literally `data/libero_mujoco3.3.2/`) and **RoboTwin 2.0** (vendored harness in `third_party/RoboTwin`, upstream commit `bf44be51`, policies stripped).
 

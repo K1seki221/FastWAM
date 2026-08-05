@@ -17,5 +17,6 @@ Distilled codebase knowledge for future sessions. Read `00_overview.md` first, t
 | `10_router_host_survey.md` | Web survey (2026-07): top VLM+action-DiT frameworks on LIBERO and how the condition router fits each — GR00T N1.7 / π0.5 / FLOWER |
 | `11_groot_router_design.md` | Isaac-GR00T N1.7 mapped (vendored at `FastWAM/Isaac-GR00T`, upstream 9c7e746): incumbent VLM→DiT wiring, v1/v2 router insertion design with file:line anchors, official LIBERO recipe, experiment sequence |
 | `12_groot_fuyao_runbook.md` | GR00T×router on fuyao: current state, submit chain, provisioned paths, and the container/venv/cache lessons from getting the baseline running |
+| `13_local_training_and_profile.md` | GR00T router training: local launch commands (both arms), router CLI reference, measured memory/wall-clock profile, RouterLLM telemetry glossary |
 
 Facts were verified against the code as of commit `45d8e14` (2026-04). Line numbers are approximate anchors — re-grep if code has moved.
