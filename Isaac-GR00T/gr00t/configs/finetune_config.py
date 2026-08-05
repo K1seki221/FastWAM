@@ -82,6 +82,9 @@ class FinetuneConfig:
     """Withhold router-logit updates for the first N optimizer steps (0 = off).
     Scale with total steps (e.g. 5%, matching warmup_ratio): lets a from-scratch
     DiT settle before the router starts choosing layers."""
+    router_candidate_proj: bool = False
+    """Give each candidate layer its own identity-init Linear(dim,dim) adapter
+    between its norm and the mix (block-shared). Adapters train at base lr."""
     select_layer: int | None = None
     backbone_embedding_dim: int | None = None
     dit_num_layers: int | None = None

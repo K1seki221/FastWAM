@@ -92,8 +92,26 @@ verification (loss separation + routing structure) before the 6-day full runs.
 Arm E = `pilot_E_uniform_k4_baselr`: same as B but ROUTER_LR=1e-4 (= DiT base
 lr, i.e. no 20x router-LR boost) — isolates the router-LR choice.
 **Arms E and F were killed at ~step 400-500 on user request (2026-08-05)** —
-GPUs 2/3 released; the LR and freeze-delay ablations remain open questions.
+GPUs 2/3 released; the LR and freeze-delay ablations moved to another server
+(pull K1seki221/FastWAM main and use scripts/launch_pilot_qwen28.sh E|F).
 Core pilots = A-D only.
+
+### Architecture rev 2: per-candidate proj adapters (2026-08-05)
+
+v1-arch pilots A-D killed at ~step 4-5K (curves preserved on wandb; dirs
+`pilot_*` without suffix are v1-arch leftovers). Relaunched as
+`pilot_*_pcproj` with NEW flag `--router-candidate-proj`
+(`PILOT_SUFFIX=_pcproj ROUTER_PCPROJ=1` in the launcher): each candidate gets
+an identity-init `Linear(2048,2048)` between its LayerNorm and the mix —
+candidate-specific VLM->conditioning alignment, block-shared, router weights
+still applied upstream of the blocks' shared to_k/to_v. Rationale: moving the
+mix across the (linear, shared) to_k/to_v alone is a mathematical no-op; the
+per-candidate adapters are what make placement meaningful. Costs: K=4 -> 16.8M
+extra params, K=28 -> 117M. Optimizer: adapters ("projs." names) are EXCLUDED
+from the router group -> base lr 1e-4 + normal decay; router group stays
+logits+norms at 2e-3/wd0 (same param counts as before: 9 learned / 8 frozen).
+Unit checks in-session: identity behavior at hard init, proj perturbation
+affects only aligned blocks, group name filter.
 Arm F = `pilot_F_uniform_k4_freeze500` (GPU 2, port 29526): same as B plus NEW
 flag `--router-freeze-steps 500` (5% of steps, scale with budget) — logit grads
 dropped pre-optimizer-step for the first N steps ("let the DiT settle before

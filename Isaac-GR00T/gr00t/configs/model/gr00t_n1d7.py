@@ -111,6 +111,10 @@ class Gr00tN1d7Config(PretrainedConfig):
     # Withhold logit updates for the first N optimizer steps (0 = off); grads
     # are dropped pre-step so logits stay in the optimizer group throughout.
     router_freeze_steps: int = 0
+    # Per-candidate identity-init Linear(dim,dim) adapters between norm and mix
+    # (candidate-specific VLM->conditioning alignment; block-shared). Trained at
+    # BASE lr with normal weight decay, not the router lr.
+    router_candidate_proj: bool = False
 
     diffusion_model_cfg: dict = field(
         default_factory=lambda: {

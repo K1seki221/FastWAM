@@ -214,10 +214,13 @@ class Gr00tTrainer(Trainer):
         def is_backbone(name):  # wrapper-prefix tolerant (e.g. DeepSpeed module.)
             return name.split("module.")[-1].startswith("backbone.")
 
+        # Router group = gate logits + per-candidate norms. The optional
+        # per-candidate proj adapters (".projs.") are representation weights,
+        # not routing — they train at base lr with normal decay treatment.
         router_named = [
             (n, p)
             for n, p in opt_model.named_parameters()
-            if "condition_router" in n and p.requires_grad
+            if "condition_router" in n and "projs." not in n and p.requires_grad
         ]
         backbone_lr = getattr(opt_model.config, "backbone_lr", None)
         backbone_named = (

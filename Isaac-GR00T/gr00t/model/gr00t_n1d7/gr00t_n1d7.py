@@ -44,9 +44,23 @@ class ConditionRouter(nn.Module):
     close to the stock wiring.
     """
 
-    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False):
+    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False):
         super().__init__()
         self.norms = nn.ModuleList([nn.LayerNorm(dim) for _ in range(num_candidates)])
+        # Optional per-candidate linear adapters (identity-init): each VLM depth
+        # gets its own alignment into the conditioning space before mixing; the
+        # blocks' shared to_k/to_v then project the mixture (factorized
+        # per-candidate K/V projection, block-shared). Without these, moving the
+        # mix across the linear to_k/to_v is a mathematical no-op.
+        self.projs = (
+            nn.ModuleList([nn.Linear(dim, dim) for _ in range(num_candidates)])
+            if candidate_proj
+            else None
+        )
+        if self.projs is not None:
+            for lin in self.projs:
+                nn.init.eye_(lin.weight)
+                nn.init.zeros_(lin.bias)
         self.init_bias = init_bias
         self.init_mode = init_mode
         logits = torch.zeros(num_cross_blocks, num_candidates)
@@ -62,9 +76,10 @@ class ConditionRouter(nn.Module):
 
     def forward(self, features_all: torch.Tensor) -> torch.Tensor:
         """features_all: [B, K, S, D] -> routed conditions [B, N_cross, S, D]."""
-        normed = torch.stack(
-            [norm(features_all[:, k]) for k, norm in enumerate(self.norms)], dim=1
-        )  # [B, K, S, D]
+        xs = [norm(features_all[:, k]) for k, norm in enumerate(self.norms)]
+        if self.projs is not None:
+            xs = [proj(x) for proj, x in zip(self.projs, xs)]
+        normed = torch.stack(xs, dim=1)  # [B, K, S, D]
         weights = self.logits.softmax(dim=-1).to(normed.dtype)  # [N, K]
         return torch.einsum("nk,bksd->bnsd", weights, normed)
 
@@ -149,6 +164,7 @@ class Gr00tN1d7ActionHead(nn.Module):
                 init_bias=config.router_init_bias,
                 init_mode=getattr(config, "router_init_mode", "last"),
                 frozen=getattr(config, "router_frozen", False),
+                candidate_proj=getattr(config, "router_candidate_proj", False),
             )
 
         # State dropout parameters
@@ -268,6 +284,10 @@ class Gr00tN1d7ActionHead(nn.Module):
                 for norm in self.condition_router.norms:
                     norm.weight.fill_(1.0)
                     norm.bias.zero_()
+                if self.condition_router.projs is not None:
+                    for lin in self.condition_router.projs:
+                        lin.weight.copy_(torch.eye(lin.weight.shape[0]))
+                        lin.bias.zero_()
                 if isinstance(self.vlln, nn.LayerNorm):
                     self.condition_router.norms[-1].weight.copy_(self.vlln.weight)
                     self.condition_router.norms[-1].bias.copy_(self.vlln.bias)

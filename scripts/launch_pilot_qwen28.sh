@@ -51,8 +51,11 @@ case "$arm" in
   E) name=pilot_E_uniform_k4_baselr ;;
   F) name=pilot_F_uniform_k4_freeze500 ;;
 esac
+name="$name${PILOT_SUFFIX:-}"
 gpu="${PILOT_GPU:-$gpu}"
 port="${PILOT_PORT:-$port}"
+# ROUTER_PCPROJ=1 => per-candidate identity-init proj adapters (v1.5-lite)
+[[ "${ROUTER_PCPROJ:-0}" == "1" ]] && init="$init --router-candidate-proj"
 
 ld_env=()
 if [[ -d "$FFMPEG_LIB" ]]; then
