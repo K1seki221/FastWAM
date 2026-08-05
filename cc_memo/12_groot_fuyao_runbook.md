@@ -1,17 +1,26 @@
-# GR00T × condition-router on fuyao — operational runbook (as of 2026-07-30)
+# GR00T × condition-router on fuyao — operational runbook (as of 2026-08-05)
 
 Companion to `11_groot_router_design.md` (design) — this file is the operational state + hard-won cluster lessons from getting the baseline running.
 
 ## Current state
 
-- **Code**: router v1 implemented + committed; Isaac-GR00T (upstream `9c7e746` + router) vendored at `FastWAM/Isaac-GR00T`, ships via `git pull` to fuyao. 5/5 unit tests pass (incl. forward/backward gradient checks). NOT yet done: router-stats→wandb logging hook in `Gr00tTrainer.compute_loss`; checkpoint-load smoke of the identity-init path (happens implicitly on first router run).
+- **Repo**: public at github.com/K1seki221/FastWAM (origin = SSH, box deploy key
+  registered). Router v1 + Qwen36 stack + eval harnesses + docs all pushed
+  (commits 9e6453a/42e0c3f/4737ab7). Local-launch guide: `13_local_training_and_profile.md`.
+- **Experiments done**: Phase A LIBERO stage-1 4-arm sweep (saturated, router = free
+  lunch + stability; tables below); GR1-tabletop stage-1 pair s1_gr1_{baseline,router}
+  60K x 512 with staged eval at 52/56/60K (results below).
+- **In flight**: Qwen3-VL 36-layer pair s1_qwen36_{fixed,router} — submitted
+  2026-08-04, both JOB_PENDING on rc-embodied-foundation-model-h200-p1 as of
+  2026-08-05 (job IDs + recipe in the Qwen36 section).
 - **Provisioned on fuyao** (`BASE=/dataset_rc/ruijie.zhang@xiaopeng.com`):
-  - Repo: `$BASE/FastWAM` (pull to update)
-  - Venv: `$BASE/projects/groot/venv` (**outside the repo** — see lesson 2), built with uv; python at `$BASE/projects/groot/uv_python`, uv cache `$BASE/projects/groot/uv_cache`
-  - Data: `$BASE/libero_groot/libero_{10,goal,object,spatial}_no_noops_1.0.0_lerobot` (IPEC-COMMUNITY, ~1.8 GB total, `modality.json` in each `meta/`, libero_goal episode-82 patched). NOT the same as `/dataset_rc/vlm/vit/LIBERO-fastwam` (Fast-WAM preprocessing).
-  - Weights: `$BASE/hf/hub/models--nvidia--{GR00T-N1.7-3B,Cosmos-Reason2-2B}` (copied `cp -a` from the interactive container's `/dataset-cpfs3-rc/hf/hub`)
-  - Runs: `$BASE/projects/groot_runs/<RUN_NAME>`
-- **Where we are**: baseline `libero_10` submission ready; awaiting first successful run + seconds-per-step, then the 8-run matrix (4 suites × {baseline, router}) per `11`'s plan.
+  repo `$BASE/FastWAM`; venv `$BASE/projects/groot/venv` (outside the repo);
+  LIBERO data `$BASE/libero_groot/...`; GR1 corpus `$BASE/starvla_data/gr1_unified/`
+  (24 dirs, repaired + stats'd); weights `$BASE/hf/hub/models--nvidia--{GR00T-N1.7-3B,
+  Cosmos-Reason2-2B}` + shared `/dataset_rc/robot/hf/...Qwen3-VL-4B-Instruct`;
+  runs `$BASE/projects/groot_runs/<RUN_NAME>`; evals `$BASE/projects/groot_evals/`.
+- **Open downloads**: RoboTwin-Randomized stuck ~75/79.5 GB; bridge/fractal GR00T
+  metadata prep queued (see download playbook).
 
 ## Phase A closed-loop results (2026-08-01, LIBERO 4 suites, 10 eps/task)
 
@@ -195,3 +204,75 @@ sample budget as s1_gr1_* pair; max_steps counts optimizer steps). NEVER launch
 this arch at per-GPU 64. submit_fuyao_groot.sh now forwards GR00T_BACKBONE_PATH
 (was missing -> job would silently fall back to Cosmos). Prior 3B GR1 pair:
 60K steps in ~7.2h on 8xH200; 6B/36L estimate ~15-18h per run.
+
+## Phase A LIBERO checkpoint sweep (2026-08-04 summary; 40 tasks x 10 eps per cell)
+
+| ckpt | baseline | router 1e-3 | router 5e-3 | router 1e-2 |
+|---|---|---|---|---|
+| 22K | .9975 | .9950 | .9855 | .9925 |
+| 24K | .9807 | .9975 | .9884 | .9900 |
+| 26K | .9925 | .9925 | .9975 | .9900 |
+| 28K | .9750 | .9975 | .9925 | .9975 |
+| 30K | .9900 | .9850 | .9850 | .9950 |
+| mean | .9871 | .9935 | .9898 | .9930 |
+
+Readings: peaks are parity (saturated benchmark; 1 flipped episode = 0.25pt);
+but the router arms are more STABLE — baseline floor .975 (2.3pt swings) vs
+router floors >= .985, and all router means beat baseline by +0.3..0.7pt.
+Router LR is a non-hyperparameter across 1e-3..1e-2. Figure:
+/tmp/plot_libero_curves.py (data inlined) -> libero_router_curves.png.
+
+## GR1-tabletop staged eval (2026-08-02..03; 24 tasks x 10 eps; ckpts 52/56/60K)
+
+Overall / 6 base PnP tasks / 18 Posttrain-novel tasks:
+
+| ckpt | baseline overall | base6 | novel18 | router overall | base6 | novel18 |
+|---|---|---|---|---|---|---|
+| 52K | .3532 | .2907 | .3741 | .2391 | .2889 | .2226 |
+| 56K | .3552 | .3500 | .3570 | .2745 | .3303 | .2559 |
+| 60K | .3502 | .4136 | .3290 | .3177 | .3061 | .3215 |
+
+(official finetuned-N1.7 anchor: 44.5% — different regime, we are stage-1 from scratch)
+
+Readings: (1) baseline overall is FLAT (.350-.355) while router CLIMBS
+(.239 -> .275 -> .318), still rising at 60K; (2) on the 18 novel tasks at 60K
+the two are at parity (.322 router vs .329 baseline) and the baseline's novel
+score has been FALLING since 52K (.374 -> .329, trading novel for base-task
+memorization) while the router's rises; (3) the deficit is confined to the 6
+base tasks. Interpretation: routing slows early convergence but changes the
+late-training dynamic; extended training (>60K) is the obvious follow-up.
+Router mixture stayed soft (entropy 2.375 at 60K). CSVs:
+projects/groot_evals/eval_gr1_{baseline,router}_{52000,56000,60000}/results.csv.
+
+## Qwen36 pair submission record (2026-08-04)
+
+- s1_qwen36_fixed  = bifrost-2026080402421810-ruijie-zhang (frozen span map, bias 16.0)
+- s1_qwen36_router = bifrost-2026080402433201-ruijie-zhang (learned, span init, bias 3.0)
+- Recipe: 8xH200, queue rc-embodied-foundation-model-h200-p1, gr1_unified corpus,
+  ROBOCASA_GR1_TABLETOP, GR00T_BACKBONE_PATH=Qwen3-VL-4B-Instruct snapshot,
+  MAX_STEPS=60000, GLOBAL_BATCH_SIZE=256 + --gradient_accumulation_steps 2
+  (effective 512), SAVE_STEPS=2000 SAVE_TOTAL_LIMIT=40, USE_ROUTER=1
+  ROUTER_LR=1e-3 ROUTER_LAYERS="9 18 27 36", --skip-weight-loading --tune-llm
+  --tune-visual --backbone-lr 1e-5 --select-layer 36 --backbone-embedding-dim 2560
+  --dit-num-layers 36 --router-init-mode span. Only diff between arms:
+  --router-init-bias 16.0 --router-frozen  vs  --router-init-bias 3.0.
+- Status: both JOB_PENDING since submission (queue busy). Est ~15-18h each once
+  running. Expected first-step signatures: create_optimizer router group 8 (fixed)
+  / 9 (router) params; RouterLLM w_mean L09/18/27/36 = .278/.222/.278/.222.
+- 2026-08-04 late: dev-box SSH went unreachable ~1h (banner timeout at jump host);
+  jobs unaffected (queue-side). Monitor survived; QUERY_FAIL events during the
+  window were connectivity, not job state.
+
+## CPFS ENOSPC incident (2026-08-05)
+
+/dataset_rc (shared 3PB CPFS, rc-perception) hit 99% and returned ENOSPC on
+close() even for KB-sized files while df showed "36T avail" (accounting lag /
+reserve). Fallout: a python open(w) TRUNCATED cc_memo/12 to 0 bytes when the
+flush failed (recovered via git checkout). Lessons:
+- NEVER rewrite a tracked file in place on CPFS during space pressure; write to
+  /tmp (box-local disk, unaffected) and mv, or verify with wc -c afterwards.
+- rm works under ENOSPC; freed ~270GB of disposable smoke_qwen36_* run dirs.
+- Risk to training jobs: checkpoint saves will crash if the volume is full when
+  they run. Qwen36 pair needs ~0.75TB total (2 runs x 30 ckpts x ~12.5GB).
+  If ENOSPC recurs, escalate to infra / trim old run dirs (libero_10 pairs
+  ~300GB are fine-tune-era, candidates after confirming with Ruijie).
