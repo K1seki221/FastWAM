@@ -42,6 +42,7 @@ case "$arm" in
   E) gpu=3; port=29525; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0"; rlr=1e-4 ;;
   F) gpu=2; port=29526; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-freeze-steps 500" ;;
   G) gpu=1; port=29527; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-entropy-coef 0.02" ;;
+  H) gpu=0; port=29528; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-mix-renorm" ;;
   *) echo "unknown arm $arm" >&2; exit 1 ;;
 esac
 case "$arm" in
@@ -52,6 +53,7 @@ case "$arm" in
   E) name=pilot_E_uniform_k4_baselr ;;
   F) name=pilot_F_uniform_k4_freeze500 ;;
   G) name=pilot_G_uniform_k4_entropy ;;
+  H) name=pilot_H_uniform_k4_mixnorm ;;
 esac
 name="$name${PILOT_SUFFIX:-}"
 gpu="${PILOT_GPU:-$gpu}"

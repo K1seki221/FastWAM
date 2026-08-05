@@ -44,7 +44,7 @@ class ConditionRouter(nn.Module):
     close to the stock wiring.
     """
 
-    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False):
+    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False, mix_renorm: bool = False):
         super().__init__()
         self.norms = nn.ModuleList([nn.LayerNorm(dim) for _ in range(num_candidates)])
         # Optional per-candidate linear adapters (identity-init): each VLM depth
@@ -63,6 +63,12 @@ class ConditionRouter(nn.Module):
                 nn.init.zeros_(lin.bias)
         self.init_bias = init_bias
         self.init_mode = init_mode
+        # Rescale the mixture by 1/sqrt(sum w^2): a convex mix of unit-RMS,
+        # decorrelated candidates has RMS ~ sqrt(sum w^2), so without this the
+        # conditioning magnitude depends on routing entropy (one-hot 1.0,
+        # uniform K=4 ~0.5, K=28 ~0.19). Deterministic, exactly 1 at one-hot
+        # => preserves exact stock identity at hard init.
+        self.mix_renorm = mix_renorm
         logits = torch.zeros(num_cross_blocks, num_candidates)
         if init_mode == "span":
             # iron_vla depth-aligned identity: block-span i -> candidate i
@@ -81,7 +87,11 @@ class ConditionRouter(nn.Module):
             xs = [proj(x) for proj, x in zip(self.projs, xs)]
         normed = torch.stack(xs, dim=1)  # [B, K, S, D]
         weights = self.logits.softmax(dim=-1).to(normed.dtype)  # [N, K]
-        return torch.einsum("nk,bksd->bnsd", weights, normed)
+        mixed = torch.einsum("nk,bksd->bnsd", weights, normed)
+        if self.mix_renorm:
+            scale = weights.pow(2).sum(dim=-1).clamp_min(1e-9).rsqrt()  # [N]
+            mixed = mixed * scale.view(1, -1, 1, 1)
+        return mixed
 
     @torch.no_grad()
     def mixture_stats(self) -> dict[str, torch.Tensor]:
@@ -165,6 +175,7 @@ class Gr00tN1d7ActionHead(nn.Module):
                 init_mode=getattr(config, "router_init_mode", "last"),
                 frozen=getattr(config, "router_frozen", False),
                 candidate_proj=getattr(config, "router_candidate_proj", False),
+                mix_renorm=getattr(config, "router_mix_renorm", False),
             )
 
         # State dropout parameters

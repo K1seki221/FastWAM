@@ -119,6 +119,9 @@ class Gr00tN1d7Config(PretrainedConfig):
     # coef(t) = coef * (1 - step/max_steps). Zero-gradient at exact uniform;
     # resists premature commitment early, fades to let the task loss commit.
     router_entropy_coef: float = 0.0
+    # Rescale the mixture by 1/sqrt(sum w^2): decouples conditioning magnitude
+    # from routing entropy. Exactly 1 at one-hot (stock identity preserved).
+    router_mix_renorm: bool = False
 
     diffusion_model_cfg: dict = field(
         default_factory=lambda: {

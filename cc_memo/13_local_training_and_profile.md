@@ -123,6 +123,17 @@ NOTE: measured VLM layer-norm scales (text probe, Qwen3-VL-2B): L1 15, L7 852,
 L14 949, L21 1527, L27 3371, L28 2452 — 159x spread over pool 1..28; the
 per-candidate LayerNorms are load-bearing (esp. arm D). Watch norm/proj gains
 when interpreting W (effective contribution = w * gain).
+
+Arm H = `pilot_H_uniform_k4_mixnorm_pcproj` (GPU 0, port 29528): B_pcproj plus
+NEW flag `--router-mix-renorm` — mixture rescaled by 1/sqrt(sum w^2), which
+decouples conditioning MAGNITUDE from routing entropy (mix of unit-RMS
+decorrelated candidates has RMS ~ sqrt(sum w^2): one-hot 1.0, uniform K=4
+0.5, K=28 0.19 — so un-renormed uniform arms start with 2-5x weaker
+conditioning than fixed arms; magnitude confound in early A-vs-B loss gaps).
+Exactly 1 at one-hot => stock identity preserved. Unit-checked: one-hot
+no-op, uniform K=4 exactly 2x, grads flow. Also NOTE: vlln is BYPASSED in the
+routed path (per-candidate norms replace it; no post-mix norm by design —
+a post-mix LayerNorm would break exact stock identity).
 Arm F = `pilot_F_uniform_k4_freeze500` (GPU 2, port 29526): same as B plus NEW
 flag `--router-freeze-steps 500` (5% of steps, scale with budget) — logit grads
 dropped pre-optimizer-step for the first N steps ("let the DiT settle before
