@@ -129,10 +129,10 @@ L14 949, L21 1527, L27 3371, L28 2452 — 159x spread over pool 1..28; the
 per-candidate LayerNorms are load-bearing (esp. arm D). Watch norm/proj gains
 when interpreting W (effective contribution = w * gain).
 
-**Arms A and C (frozen-router baselines) killed at ~7K/10K on user request
-(2026-08-05)**: even frozen, they carry trainable per-candidate norms + pcproj
-adapters (16.8M) the stock model lacks — fine as learnability controls, wrong
-as "no router" anchors. Replaced by Arm Z = `pilot_Z_stock` (GPU 2, port
+**Arms A and C (frozen-router baselines) killed at ~1.5K/10K on user request
+(2026-08-05; died pre-first-checkpoint, partial curves only)**: even frozen,
+they carry trainable per-candidate norms + pcproj adapters (16.8M) the stock
+model lacks — fine as learnability controls, wrong as "no router" anchors. Replaced by Arm Z = `pilot_Z_stock` (GPU 2, port
 29529, launcher arm Z, USE_ROUTER=0): TRUE no-router stock path — single
 select_layer-28 tap through vlln, no candidate norms, no adapters. Z-vs-C
 would isolate adapter capacity; Z-vs-learned-arms = "router vs stock".
@@ -143,8 +143,23 @@ router-free code path can express per-block taps), NO pcproj adapters,
 per-tap norms at BASE lr 1e-4 (`PILOT_ROUTER_LR` launcher knob) so they
 train exactly like Z's vlln. Capacity over Z: only 4 LayerNorms vs 1 (16K
 params). Decomposition: Z vs A_hard = mapping; A_hard vs B = mapping +
-capacity + learnability; old A_pcproj (7K curve) fills the capacity-matched
-learnability contrast if needed.
+capacity + learnability.
+
+**2026-08-05 (later): baselines get per-tap projectors (iron_vla parity,
+user decision)** — iron_vla's no-router configs ALWAYS have a per-tapped-layer
+Linear projector (+ weightless shared RMSNorm); our A_hard/Z lack that
+capacity. Fixes, run alongside (8 arms = all 8 GPUs):
+- A_pcproj RERUN fresh on GPU 4 port 29531 (original died pre-checkpoint):
+  frozen span + norms(2e-3) + identity-init projs(base lr) — capacity-matched
+  fixed control for B AND the faithful iron_vla-fixed-mapping analog.
+- Arm Y = `pilot_Y_last_proj` (GPU 3, port 29530, launcher arm Y +
+  ROUTER_PCPROJ=1): last-layer baseline WITH projector, implemented as K=1
+  candidate pool {28} — softmax of a single logit is EXACTLY 1.0 (no
+  leakage, no dead params); one learnable norm + one identity-init proj.
+  Y vs Z isolates the projector; Y vs A_pcproj isolates the mapping at
+  matched capacity; A_pcproj vs B isolates learnability.
+Z and A_hard kept running (free GPUs; complete the capacity ladder
+Z -> A_hard -> Y/A_pcproj -> B).
 
 Arm H = `pilot_H_uniform_k4_mixnorm_pcproj` (GPU 0, port 29528): B_pcproj plus
 NEW flag `--router-mix-renorm` — mixture rescaled by 1/sqrt(sum w^2), which

@@ -45,6 +45,10 @@ case "$arm" in
   G) gpu=1; port=29527; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-entropy-coef 0.02" ;;
   H) gpu=0; port=29528; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-mix-renorm" ;;
   Z) gpu=2; port=29529; layers=""; init=""; use_router=0 ;;  # true no-router stock path (vlln + single select_layer tap)
+  # Y: last-layer baseline WITH per-tap projector (iron_vla-style): K=1 pool
+  # {28} => softmax of one logit is exactly 1.0 (zero leakage); one learnable
+  # norm + one identity-init proj. Launch with ROUTER_PCPROJ=1.
+  Y) gpu=3; port=29530; layers="28"; init="--router-init-mode last --router-init-bias 0.0 --router-frozen" ;;
   *) echo "unknown arm $arm" >&2; exit 1 ;;
 esac
 case "$arm" in
@@ -57,11 +61,13 @@ case "$arm" in
   G) name=pilot_G_uniform_k4_entropy ;;
   H) name=pilot_H_uniform_k4_mixnorm ;;
   Z) name=pilot_Z_stock ;;
+  Y) name=pilot_Y_last_proj ;;
 esac
 name="$name${PILOT_SUFFIX:-}"
 gpu="${PILOT_GPU:-$gpu}"
 port="${PILOT_PORT:-$port}"
 rlr="${PILOT_ROUTER_LR:-$rlr}"
+init="$init ${PILOT_EXTRA:-}"
 # ROUTER_PCPROJ=1 => per-candidate identity-init proj adapters (v1.5-lite)
 [[ "${ROUTER_PCPROJ:-0}" == "1" && "$use_router" == "1" ]] && init="$init --router-candidate-proj"
 
