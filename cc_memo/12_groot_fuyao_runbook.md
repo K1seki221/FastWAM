@@ -276,3 +276,18 @@ flush failed (recovered via git checkout). Lessons:
   they run. Qwen36 pair needs ~0.75TB total (2 runs x 30 ckpts x ~12.5GB).
   If ENOSPC recurs, escalate to infra / trim old run dirs (libero_10 pairs
   ~300GB are fine-tune-era, candidates after confirming with Ruijie).
+
+## Checkpoint offload to OSS (2026-08-05)
+
+All 89 ckpts (8 runs, 1.37TB) moved off CPFS to
+oss://xrobot-log/user-upload/fuyao/ruijie-zhang/groot_runs/<run_name>/
+(browse: https://xrobot.xiaopeng.link/resource/xrobot-log/user-upload/fuyao/ruijie-zhang/groot_runs/).
+Flow: ossutil cp -r -f -u (resume-safe) -> EXACT per-file verify (/tmp/oss_verify.py:
+every local file must exist remotely with byte-identical size; OSS 0-byte
+directory-marker objects ignored) -> rm -rf local only on VERIFY_PASS. All 8 passed.
+Auth: --config-file iron_vla/data_tools/sync_ckpt/oss_config (box has no ~/.ossutilconfig).
+Pitfalls recorded: (1) object-count/du comparisons FALSE-ALARM on OSS dir markers
+(+1 obj per dir) and local dir inodes (+4096B per dir in du -sb) — compare per-file
+sizes, never aggregates; (2) pkill -f with the script name in the pattern kills the
+ssh session itself (self-match) — kill by exact pid. Pull back any ckpt with:
+ossutil --config-file <cfg> cp -r oss://xrobot-log/user-upload/fuyao/ruijie-zhang/groot_runs/<run>/checkpoint-N/ <dst>
