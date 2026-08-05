@@ -115,6 +115,10 @@ class Gr00tN1d7Config(PretrainedConfig):
     # (candidate-specific VLM->conditioning alignment; block-shared). Trained at
     # BASE lr with normal weight decay, not the router lr.
     router_candidate_proj: bool = False
+    # Entropy-annealed exploration: loss -= coef(t) * mean routing entropy,
+    # coef(t) = coef * (1 - step/max_steps). Zero-gradient at exact uniform;
+    # resists premature commitment early, fades to let the task loss commit.
+    router_entropy_coef: float = 0.0
 
     diffusion_model_cfg: dict = field(
         default_factory=lambda: {

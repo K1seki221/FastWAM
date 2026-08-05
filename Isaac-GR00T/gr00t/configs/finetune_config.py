@@ -85,6 +85,9 @@ class FinetuneConfig:
     router_candidate_proj: bool = False
     """Give each candidate layer its own identity-init Linear(dim,dim) adapter
     between its norm and the mix (block-shared). Adapters train at base lr."""
+    router_entropy_coef: float = 0.0
+    """Entropy bonus coefficient on the routing distribution, annealed linearly
+    to zero over max_steps (explore-then-commit). 0 = off."""
     select_layer: int | None = None
     backbone_embedding_dim: int | None = None
     dit_num_layers: int | None = None

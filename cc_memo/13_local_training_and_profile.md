@@ -112,6 +112,17 @@ from the router group -> base lr 1e-4 + normal decay; router group stays
 logits+norms at 2e-3/wd0 (same param counts as before: 9 learned / 8 frozen).
 Unit checks in-session: identity behavior at hard init, proj perturbation
 affects only aligned blocks, group name filter.
+
+Arm G = `pilot_G_uniform_k4_entropy_pcproj` (GPU 1, port 29527): B_pcproj plus
+NEW flag `--router-entropy-coef 0.02` — loss -= coef(t) * mean routing entropy,
+coef annealed linearly to 0 over max_steps (explore-then-commit). Computed in
+Gr00tTrainer.compute_loss straight from the logits (static router => no
+forward plumbing); zero gradient at exact uniform, restoring force once
+weights drift, force fades as coef anneals. Unit-checked both properties.
+NOTE: measured VLM layer-norm scales (text probe, Qwen3-VL-2B): L1 15, L7 852,
+L14 949, L21 1527, L27 3371, L28 2452 — 159x spread over pool 1..28; the
+per-candidate LayerNorms are load-bearing (esp. arm D). Watch norm/proj gains
+when interpreting W (effective contribution = w * gain).
 Arm F = `pilot_F_uniform_k4_freeze500` (GPU 2, port 29526): same as B plus NEW
 flag `--router-freeze-steps 500` (5% of steps, scale with budget) — logit grads
 dropped pre-optimizer-step for the first N steps ("let the DiT settle before

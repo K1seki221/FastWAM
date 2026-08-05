@@ -89,6 +89,7 @@ if __name__ == "__main__":
     config.model.router_frozen = ft_config.router_frozen
     config.model.router_freeze_steps = ft_config.router_freeze_steps
     config.model.router_candidate_proj = ft_config.router_candidate_proj
+    config.model.router_entropy_coef = ft_config.router_entropy_coef
     if ft_config.select_layer is not None:
         config.model.select_layer = ft_config.select_layer
     if ft_config.backbone_embedding_dim is not None:

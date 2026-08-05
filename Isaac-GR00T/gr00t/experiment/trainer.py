@@ -417,6 +417,20 @@ class Gr00tTrainer(Trainer):
         # Record last loss for testing purposes.
         self.loss = loss
 
+        # Entropy-annealed router exploration: loss -= coef(t) * mean routing
+        # entropy, coef(t) linear to 0 over max_steps. The static router's
+        # entropy depends only on the logits, so no forward-pass plumbing.
+        coef0 = float(getattr(self.model.config, "router_entropy_coef", 0.0) or 0.0)
+        if coef0 > 0.0 and model.training:
+            m = model.module if hasattr(model, "module") else model
+            router = getattr(getattr(m, "action_head", None), "condition_router", None)
+            if router is not None and router.logits.requires_grad:
+                anneal = max(0.0, 1.0 - self.state.global_step / max(1, self.args.max_steps))
+                w = router.logits.softmax(dim=-1)
+                entropy = -(w * (w + 1e-9).log()).sum(dim=-1).mean()
+                loss = loss - coef0 * anneal * entropy
+                self.loss = loss
+
         # --------------------------------------------------------------
         # Accuracy calculation
         # --------------------------------------------------------------
