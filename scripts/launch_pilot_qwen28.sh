@@ -34,6 +34,7 @@ fi
   || { echo "Qwen3-VL-2B snapshot not found (set GR00T_BACKBONE_PATH)" >&2; exit 1; }
 
 rlr=2e-3
+use_router=1
 case "$arm" in
   A) gpu=5; port=29521; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 16.0 --router-frozen" ;;
   B) gpu=7; port=29522; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0" ;;
@@ -43,6 +44,7 @@ case "$arm" in
   F) gpu=2; port=29526; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-freeze-steps 500" ;;
   G) gpu=1; port=29527; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-entropy-coef 0.02" ;;
   H) gpu=0; port=29528; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-mix-renorm" ;;
+  Z) gpu=2; port=29529; layers=""; init=""; use_router=0 ;;  # true no-router stock path (vlln + single select_layer tap)
   *) echo "unknown arm $arm" >&2; exit 1 ;;
 esac
 case "$arm" in
@@ -54,12 +56,13 @@ case "$arm" in
   F) name=pilot_F_uniform_k4_freeze500 ;;
   G) name=pilot_G_uniform_k4_entropy ;;
   H) name=pilot_H_uniform_k4_mixnorm ;;
+  Z) name=pilot_Z_stock ;;
 esac
 name="$name${PILOT_SUFFIX:-}"
 gpu="${PILOT_GPU:-$gpu}"
 port="${PILOT_PORT:-$port}"
 # ROUTER_PCPROJ=1 => per-candidate identity-init proj adapters (v1.5-lite)
-[[ "${ROUTER_PCPROJ:-0}" == "1" ]] && init="$init --router-candidate-proj"
+[[ "${ROUTER_PCPROJ:-0}" == "1" && "$use_router" == "1" ]] && init="$init --router-candidate-proj"
 
 ld_env=()
 if [[ -d "$FFMPEG_LIB" ]]; then
@@ -78,7 +81,7 @@ env \
   EMBODIMENT_TAG=ROBOCASA_GR1_TABLETOP \
   NUM_GPUS=1 CUDA_VISIBLE_DEVICES=$gpu MASTER_PORT=$port \
   MAX_STEPS=10000 GLOBAL_BATCH_SIZE=16 SAVE_STEPS=2500 SAVE_TOTAL_LIMIT=2 \
-  USE_ROUTER=1 ROUTER_LR=$rlr ROUTER_LAYERS="$layers" \
+  USE_ROUTER=$use_router ROUTER_LR=$rlr ROUTER_LAYERS="$layers" \
   WANDB_MODE="${WANDB_MODE:-online}" \
   "${ld_env[@]}" \
   RUN_NAME=$name \

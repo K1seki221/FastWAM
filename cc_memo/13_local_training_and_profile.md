@@ -129,6 +129,15 @@ L14 949, L21 1527, L27 3371, L28 2452 — 159x spread over pool 1..28; the
 per-candidate LayerNorms are load-bearing (esp. arm D). Watch norm/proj gains
 when interpreting W (effective contribution = w * gain).
 
+**Arms A and C (frozen-router baselines) killed at ~7K/10K on user request
+(2026-08-05)**: even frozen, they carry trainable per-candidate norms + pcproj
+adapters (16.8M) the stock model lacks — fine as learnability controls, wrong
+as "no router" anchors. Replaced by Arm Z = `pilot_Z_stock` (GPU 2, port
+29529, launcher arm Z, USE_ROUTER=0): TRUE no-router stock path — single
+select_layer-28 tap through vlln, no candidate norms, no adapters. Z-vs-C
+would isolate adapter capacity; Z-vs-learned-arms = "router vs stock".
+A/C partial curves (to ~7K) remain on wandb (gpwc160z / jwnldrta).
+
 Arm H = `pilot_H_uniform_k4_mixnorm_pcproj` (GPU 0, port 29528): B_pcproj plus
 NEW flag `--router-mix-renorm` — mixture rescaled by 1/sqrt(sum w^2), which
 decouples conditioning MAGNITUDE from routing entropy (mix of unit-RMS
