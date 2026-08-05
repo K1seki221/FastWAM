@@ -291,3 +291,38 @@ Pitfalls recorded: (1) object-count/du comparisons FALSE-ALARM on OSS dir marker
 sizes, never aggregates; (2) pkill -f with the script name in the pattern kills the
 ssh session itself (self-match) — kill by exact pid. Pull back any ckpt with:
 ossutil --config-file <cfg> cp -r oss://xrobot-log/user-upload/fuyao/ruijie-zhang/groot_runs/<run>/checkpoint-N/ <dst>
+
+## Resume checklist — new kernel / new Claude session (written 2026-08-05)
+
+The dev kernel is disposable; everything durable lives on CPFS (/dataset_rc),
+GitHub (K1seki221/FastWAM), OSS (ckpts), and wandb. After a kernel restart:
+
+1. **Get the NEW ssh host from Ruijie** (bifrost-<new>-ruijie-zhang; ProxyJump
+   user-ssh-fuyao-sh-n2.xiaopeng.link, laptop key ~/.ssh/id_ed25519 unchanged).
+2. **/root on the kernel is wiped.** Consequences:
+   - wandb key gone from ~/.netrc -> recover from a submitted job:
+     `fuyao info -n bifrost-2026080402433201-ruijie-zhang` (job_cmd embeds
+     WANDB_API_KEY), or ask Ruijie.
+   - The box ssh key registered as the GitHub deploy key is gone -> new kernel
+     has a new key; add its ~/.ssh/id_*.pub to GitHub (deploy key, write access)
+     before pushing, or ask Ruijie to push.
+   - /tmp scripts gone — durable copies now in repo: scripts/oss_verify.py,
+     scripts/oss_offload.sh, scripts/plot_libero_curves.py.
+3. **Check the in-flight Qwen36 pair** (submitted 2026-08-04, JOB_PENDING as of
+   2026-08-05 — full record in the "Qwen36 pair submission record" section):
+   `fuyao info -n bifrost-2026080402421810-ruijie-zhang` (fixed) and
+   `fuyao info -n bifrost-2026080402433201-ruijie-zhang` (router). If RUNNING:
+   check wandb (finetune-gr00t-n1d7 / s1_qwen36_{fixed,router}) for loss +
+   RouterLLM signatures (fixed: w_mean .278/.222/.278/.222, entropy ~0; router:
+   entropy ~0.5 at init) and re-arm a status monitor. If FAILED: read the fuyao
+   log; likely risks are CPFS ENOSPC (volume was 99%) and OOM (never launch this
+   arch at per-GPU batch 64).
+4. **Restart the RoboTwin-Randomized download** (killed with the kernel; was
+   ~75/79.5GB): `bash /dataset_rc/ruijie.zhang@xiaopeng.com/projects/groot/dl_rtrand.sh`
+   (aria2c -c resumes from the manifest). After completion: H264-convert +
+   verify (AV1 lesson) before any training use.
+5. **Open queue**: bridge/fractal GR00T metadata prep (modality.json + repair
+   scripts); iron_vla RoboTwin eval job 29438661 result unchecked
+   ($BASE/robotwin_batch_eval/EVAL-router_pool8_top4_it100000_sync_*/summary.json).
+6. Standing rule unchanged: NO cluster job submissions/cancellations without
+   explicit approval from Ruijie for the specific launch.
