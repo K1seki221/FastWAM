@@ -44,7 +44,7 @@ class ConditionRouter(nn.Module):
     close to the stock wiring.
     """
 
-    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False, mix_renorm: bool = False, gate_mode: str = "softmax", gate_init_hi: float = 0.9, gate_init_lo: float = 0.1):
+    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False, mix_renorm: bool = False, gate_mode: str = "softmax", gate_init_hi: float = 0.9, gate_init_lo: float = 0.1, token_query: bool = False):
         super().__init__()
         self.norms = nn.ModuleList([nn.LayerNorm(dim) for _ in range(num_candidates)])
         # Optional per-candidate linear adapters (identity-init): each VLM depth
@@ -95,6 +95,11 @@ class ConditionRouter(nn.Module):
         self.logits = nn.Parameter(logits)
         if frozen:
             self.logits.requires_grad_(False)
+        # Per-token content probes: score contribution v_b . x_k[s]/sqrt(D).
+        # Zero-init => routing starts exactly at the static (uniform) prior.
+        self.token_query = (
+            nn.Parameter(torch.zeros(num_cross_blocks, dim)) if token_query else None
+        )
 
     def forward(self, features_all: torch.Tensor) -> torch.Tensor:
         """features_all: [B, K, S, D] -> routed conditions [B, N_cross, S, D]."""
@@ -102,14 +107,32 @@ class ConditionRouter(nn.Module):
         if self.projs is not None:
             xs = [proj(x) for proj, x in zip(self.projs, xs)]
         normed = torch.stack(xs, dim=1)  # [B, K, S, D]
-        if self.gate_mode == "sigmoid":
-            weights = torch.sigmoid(self.logits).to(normed.dtype)  # [N, K], independent
+        if self.token_query is not None:
+            # Per-token scores: logits prior + content term v_b . x_k[s]/sqrt(D)
+            r = torch.einsum("nd,bksd->bnks", self.token_query.to(normed.dtype), normed)
+            scores = self.logits.to(normed.dtype).view(1, *self.logits.shape, 1) + r / (
+                normed.shape[-1] ** 0.5
+            )  # [B, N, K, S]
+            if self.gate_mode == "sigmoid":
+                alpha = torch.sigmoid(scores)
+            else:
+                alpha = scores.softmax(dim=2)
+            mixed = torch.einsum("bnks,bksd->bnsd", alpha, normed)
+            if self.mix_renorm:
+                scale = alpha.pow(2).sum(dim=2).clamp_min(1e-9).rsqrt()  # [B, N, S]
+                mixed = mixed * scale.unsqueeze(-1)
+            with torch.no_grad():
+                self._last_alpha_mean = alpha.detach().float().mean(dim=(0, 3))  # [N, K]
+                self._last_alpha_token_std = alpha.detach().float().std(dim=3).mean()
         else:
-            weights = self.logits.softmax(dim=-1).to(normed.dtype)  # [N, K]
-        mixed = torch.einsum("nk,bksd->bnsd", weights, normed)
-        if self.mix_renorm:
-            scale = weights.pow(2).sum(dim=-1).clamp_min(1e-9).rsqrt()  # [N]
-            mixed = mixed * scale.view(1, -1, 1, 1)
+            if self.gate_mode == "sigmoid":
+                weights = torch.sigmoid(self.logits).to(normed.dtype)  # [N, K], independent
+            else:
+                weights = self.logits.softmax(dim=-1).to(normed.dtype)  # [N, K]
+            mixed = torch.einsum("nk,bksd->bnsd", weights, normed)
+            if self.mix_renorm:
+                scale = weights.pow(2).sum(dim=-1).clamp_min(1e-9).rsqrt()  # [N]
+                mixed = mixed * scale.view(1, -1, 1, 1)
         # Actual conditioning loudness (post-rescale if enabled): lets curves
         # separate "which layers" from "how loud" (mix of unit-RMS candidates
         # shrinks toward sqrt(sum w^2) as entropy rises).
@@ -119,6 +142,19 @@ class ConditionRouter(nn.Module):
 
     @torch.no_grad()
     def mixture_stats(self) -> dict[str, torch.Tensor]:
+        if self.token_query is not None and getattr(self, "_last_alpha_mean", None) is not None:
+            # Token-routing path: report the ACTUAL token-averaged weights from
+            # the last forward, plus the across-token dispersion (the
+            # content-dependence meter; ~0 => routing ignores content).
+            w = self._last_alpha_mean  # [N, K]
+            entropy = -(w * (w + 1e-9).log()).sum(dim=-1)
+            return {
+                "router_weights": w,
+                "router_entropy": entropy.mean(),
+                "router_sqrt_sum_w2": w.pow(2).sum(dim=-1).sqrt().mean(),
+                "router_mix_rms": getattr(self, "_last_mix_rms", None),
+                "router_alpha_token_std": self._last_alpha_token_std,
+            }
         if self.gate_mode == "sigmoid":
             w = torch.sigmoid(self.logits)  # [N, K] gates
             # Bernoulli entropy per gate, summed over candidates: -> 0 as
@@ -225,6 +261,7 @@ class Gr00tN1d7ActionHead(nn.Module):
                 gate_mode=getattr(config, "router_gate_mode", "softmax"),
                 gate_init_hi=getattr(config, "router_gate_init_hi", 0.9),
                 gate_init_lo=getattr(config, "router_gate_init_lo", 0.1),
+                token_query=getattr(config, "router_token_query", False),
             )
             if (
                 getattr(config, "router_gate_mode", "softmax") == "sigmoid"

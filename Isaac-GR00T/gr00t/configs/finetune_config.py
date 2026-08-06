@@ -91,6 +91,9 @@ class FinetuneConfig:
     router_mix_renorm: bool = False
     """Rescale the routed mixture by 1/sqrt(sum w^2) so conditioning magnitude
     is invariant to routing entropy (exactly 1 at one-hot)."""
+    router_token_query: bool = False
+    """Per-token content routing: per-block zero-init probe v_b adds
+    v_b . x_k[s]/sqrt(D) to the static logits before the gate."""
     router_gate_mode: str = "softmax"
     """"softmax" (competitive allocation, sum w = 1) or "sigmoid" (independent
     accumulation gates). Sigmoid is incompatible with router_entropy_coef."""

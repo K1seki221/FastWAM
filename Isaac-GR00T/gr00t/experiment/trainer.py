@@ -543,6 +543,8 @@ class Gr00tTrainer(Trainer):
                     if stats.get("router_gate_sum") is not None:
                         logs["RouterLLM/gate_sum"] = float(stats["router_gate_sum"])
                         logs["RouterLLM/gate_min"] = float(stats["router_gate_min"])
+                    if stats.get("router_alpha_token_std") is not None:
+                        logs["RouterLLM/alpha_token_std"] = float(stats["router_alpha_token_std"])
                     self.log(logs)
             except Exception:  # diagnostics must never kill a training step
                 logging.warning("router-stats logging failed", exc_info=True)

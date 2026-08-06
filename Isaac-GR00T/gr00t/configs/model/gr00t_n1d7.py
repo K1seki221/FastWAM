@@ -122,6 +122,10 @@ class Gr00tN1d7Config(PretrainedConfig):
     # Rescale the mixture by 1/sqrt(sum w^2): decouples conditioning magnitude
     # from routing entropy. Exactly 1 at one-hot (stock identity preserved).
     router_mix_renorm: bool = False
+    # Per-token routing: score[b,k,s] = logits[b,k] + v_b . x_k[s]/sqrt(D)
+    # with a zero-init learned probe v_b per cross block. Premixed once per
+    # backbone pass (no DiT / denoise-step dependence).
+    router_token_query: bool = False
     # Gate mode: "softmax" = competitive allocation (sum w = 1);
     # "sigmoid" = independent accumulation gates in (0,1) per candidate.
     router_gate_mode: str = "softmax"

@@ -53,6 +53,9 @@ case "$arm" in
   # others 0.1), no renorm — designed to beat the fixed baselines, not to be
   # magnitude-comparable with softmax arms. Launch with ROUTER_PCPROJ=1.
   S) gpu=7; port=29532; layers="7 14 21 28"; init="--router-gate-mode sigmoid --router-init-mode span" ;;
+  # T: per-token content routing (zero-init probes v_b + uniform logits prior,
+  # premixed, no renorm). Launch with ROUTER_PCPROJ=1.
+  T) gpu=1; port=29539; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-token-query" ;;
   *) echo "unknown arm $arm" >&2; exit 1 ;;
 esac
 case "$arm" in
@@ -67,6 +70,7 @@ case "$arm" in
   Z) name=pilot_Z_stock ;;
   Y) name=pilot_Y_last_proj ;;
   S) name=pilot_S_sigmoid_k4 ;;
+  T) name=pilot_T_token_k4 ;;
 esac
 name="$name${PILOT_SUFFIX:-}"
 name="${PILOT_NAME:-$name}"
