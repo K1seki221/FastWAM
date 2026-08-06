@@ -161,6 +161,27 @@ capacity. Fixes, run alongside (8 arms = all 8 GPUs):
 Z and A_hard kept running (free GPUs; complete the capacity ladder
 Z -> A_hard -> Y/A_pcproj -> B).
 
+### Sigmoid accumulation gates (2026-08-05, user-approved design)
+
+NEW flag `--router-gate-mode sigmoid` (+ `--router-gate-init-hi/-lo`,
+defaults 0.9/0.1): independent per-candidate gates g=sigmoid(logits) replace
+the competitive softmax — "which SET of layers helps" (accumulation) vs
+"which layer" (allocation). Design goal per user: beat the no-router
+baseline; NOT magnitude-comparable with softmax arms by construction.
+- Init = identity-accumulate: span-aligned gate 0.9, others 0.1 (both off
+  the saturation rails; zero logits would mean 0.5 gates = 2x loud — trap).
+- No renorm (accumulation semantics intact; identity init anchors start
+  loudness ~0.92 of baseline).
+- Guard: sigmoid + router_entropy_coef>0 raises (entropy bonus assumes a
+  softmax distribution).
+- Telemetry: RouterLLM/gate_sum (learned conditioning budget per block; the
+  headline sigmoid metric), gate_min (dead-gate watch); entropy key becomes
+  summed Bernoulli entropy; w_mean_L*/sqrt_sum_w2/rms_mix unchanged.
+- Arm S = `pilot_S_sigmoid_k4` (launcher arm S, pcproj on, K=4, router lr
+  2e-3, port 29532): AUTO-LAUNCHES on GPU 7 when B finishes (watcher armed).
+- Dead-gate risk note: sigmoid grad ~ g(1-g) vanishes at BOTH rails — watch
+  gate_min; a gate that closes early may never reopen.
+
 Arm H = `pilot_H_uniform_k4_mixnorm_pcproj` (GPU 0, port 29528): B_pcproj plus
 NEW flag `--router-mix-renorm` — mixture rescaled by 1/sqrt(sum w^2), which
 decouples conditioning MAGNITUDE from routing entropy (mix of unit-RMS

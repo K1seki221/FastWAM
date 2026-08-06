@@ -44,7 +44,7 @@ class ConditionRouter(nn.Module):
     close to the stock wiring.
     """
 
-    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False, mix_renorm: bool = False):
+    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False, mix_renorm: bool = False, gate_mode: str = "softmax", gate_init_hi: float = 0.9, gate_init_lo: float = 0.1):
         super().__init__()
         self.norms = nn.ModuleList([nn.LayerNorm(dim) for _ in range(num_candidates)])
         # Optional per-candidate linear adapters (identity-init): each VLM depth
@@ -69,13 +69,29 @@ class ConditionRouter(nn.Module):
         # uniform K=4 ~0.5, K=28 ~0.19). Deterministic, exactly 1 at one-hot
         # => preserves exact stock identity at hard init.
         self.mix_renorm = mix_renorm
-        logits = torch.zeros(num_cross_blocks, num_candidates)
-        if init_mode == "span":
-            # iron_vla depth-aligned identity: block-span i -> candidate i
-            for b in range(num_cross_blocks):
-                logits[b, b * num_candidates // num_cross_blocks] = init_bias
+        assert gate_mode in ("softmax", "sigmoid"), gate_mode
+        self.gate_mode = gate_mode
+        if gate_mode == "sigmoid":
+            # Independent accumulation gates: favored candidate opens at
+            # gate_init_hi, the rest at gate_init_lo. Both off the saturation
+            # rails (grad factor g(1-g) stays alive; zero logits would mean
+            # 0.5 gates, NOT a neutral start).
+            def _logit(p):
+                return float(torch.logit(torch.tensor(p)))
+            logits = torch.full((num_cross_blocks, num_candidates), _logit(gate_init_lo))
+            if init_mode == "span":
+                for b in range(num_cross_blocks):
+                    logits[b, b * num_candidates // num_cross_blocks] = _logit(gate_init_hi)
+            else:
+                logits[:, -1] = _logit(gate_init_hi)
         else:
-            logits[:, -1] = init_bias  # incumbent = deepest candidate (stock tap)
+            logits = torch.zeros(num_cross_blocks, num_candidates)
+            if init_mode == "span":
+                # iron_vla depth-aligned identity: block-span i -> candidate i
+                for b in range(num_cross_blocks):
+                    logits[b, b * num_candidates // num_cross_blocks] = init_bias
+            else:
+                logits[:, -1] = init_bias  # incumbent = deepest candidate (stock tap)
         self.logits = nn.Parameter(logits)
         if frozen:
             self.logits.requires_grad_(False)
@@ -86,7 +102,10 @@ class ConditionRouter(nn.Module):
         if self.projs is not None:
             xs = [proj(x) for proj, x in zip(self.projs, xs)]
         normed = torch.stack(xs, dim=1)  # [B, K, S, D]
-        weights = self.logits.softmax(dim=-1).to(normed.dtype)  # [N, K]
+        if self.gate_mode == "sigmoid":
+            weights = torch.sigmoid(self.logits).to(normed.dtype)  # [N, K], independent
+        else:
+            weights = self.logits.softmax(dim=-1).to(normed.dtype)  # [N, K]
         mixed = torch.einsum("nk,bksd->bnsd", weights, normed)
         if self.mix_renorm:
             scale = weights.pow(2).sum(dim=-1).clamp_min(1e-9).rsqrt()  # [N]
@@ -100,8 +119,22 @@ class ConditionRouter(nn.Module):
 
     @torch.no_grad()
     def mixture_stats(self) -> dict[str, torch.Tensor]:
-        w = self.logits.softmax(dim=-1)  # [N, K]
-        entropy = -(w * (w + 1e-9).log()).sum(dim=-1)  # [N]
+        if self.gate_mode == "sigmoid":
+            w = torch.sigmoid(self.logits)  # [N, K] gates
+            # Bernoulli entropy per gate, summed over candidates: -> 0 as
+            # gates saturate (dead-gate / commitment signal).
+            entropy = -(
+                w * (w + 1e-9).log() + (1 - w) * (1 - w + 1e-9).log()
+            ).sum(dim=-1)
+            extra = {
+                # learned "conditioning budget" per block (softmax pins it to 1)
+                "router_gate_sum": w.sum(dim=-1).mean().detach(),
+                "router_gate_min": w.min().detach(),
+            }
+        else:
+            w = self.logits.softmax(dim=-1)  # [N, K]
+            entropy = -(w * (w + 1e-9).log()).sum(dim=-1)  # [N]
+            extra = {}
         return {
             "router_weights": w.detach(),
             "router_entropy": entropy.mean().detach(),
@@ -109,6 +142,7 @@ class ConditionRouter(nn.Module):
             # mixture RMS (1 at one-hot, 1/sqrt(K) at uniform).
             "router_sqrt_sum_w2": w.pow(2).sum(dim=-1).sqrt().mean().detach(),
             "router_mix_rms": getattr(self, "_last_mix_rms", None),
+            **extra,
         }
 
 
@@ -188,7 +222,18 @@ class Gr00tN1d7ActionHead(nn.Module):
                 frozen=getattr(config, "router_frozen", False),
                 candidate_proj=getattr(config, "router_candidate_proj", False),
                 mix_renorm=getattr(config, "router_mix_renorm", False),
+                gate_mode=getattr(config, "router_gate_mode", "softmax"),
+                gate_init_hi=getattr(config, "router_gate_init_hi", 0.9),
+                gate_init_lo=getattr(config, "router_gate_init_lo", 0.1),
             )
+            if (
+                getattr(config, "router_gate_mode", "softmax") == "sigmoid"
+                and float(getattr(config, "router_entropy_coef", 0.0) or 0.0) > 0.0
+            ):
+                raise ValueError(
+                    "router_entropy_coef assumes softmax-distribution entropy; "
+                    "incompatible with router_gate_mode='sigmoid'"
+                )
 
         # State dropout parameters
         self.state_dropout_prob = config.state_dropout_prob

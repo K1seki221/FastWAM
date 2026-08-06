@@ -49,6 +49,10 @@ case "$arm" in
   # {28} => softmax of one logit is exactly 1.0 (zero leakage); one learnable
   # norm + one identity-init proj. Launch with ROUTER_PCPROJ=1.
   Y) gpu=3; port=29530; layers="28"; init="--router-init-mode last --router-init-bias 0.0 --router-frozen" ;;
+  # S: sigmoid accumulation gates, identity-accumulate init (favored 0.9 /
+  # others 0.1), no renorm — designed to beat the fixed baselines, not to be
+  # magnitude-comparable with softmax arms. Launch with ROUTER_PCPROJ=1.
+  S) gpu=7; port=29532; layers="7 14 21 28"; init="--router-gate-mode sigmoid --router-init-mode span" ;;
   *) echo "unknown arm $arm" >&2; exit 1 ;;
 esac
 case "$arm" in
@@ -62,6 +66,7 @@ case "$arm" in
   H) name=pilot_H_uniform_k4_mixnorm ;;
   Z) name=pilot_Z_stock ;;
   Y) name=pilot_Y_last_proj ;;
+  S) name=pilot_S_sigmoid_k4 ;;
 esac
 name="$name${PILOT_SUFFIX:-}"
 gpu="${PILOT_GPU:-$gpu}"

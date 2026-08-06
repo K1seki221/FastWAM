@@ -122,6 +122,13 @@ class Gr00tN1d7Config(PretrainedConfig):
     # Rescale the mixture by 1/sqrt(sum w^2): decouples conditioning magnitude
     # from routing entropy. Exactly 1 at one-hot (stock identity preserved).
     router_mix_renorm: bool = False
+    # Gate mode: "softmax" = competitive allocation (sum w = 1);
+    # "sigmoid" = independent accumulation gates in (0,1) per candidate.
+    router_gate_mode: str = "softmax"
+    # Sigmoid-mode init: favored (span/last-aligned) gate opens at _hi, the
+    # rest at _lo. Both kept off the saturation rails so gradients stay alive.
+    router_gate_init_hi: float = 0.9
+    router_gate_init_lo: float = 0.1
 
     diffusion_model_cfg: dict = field(
         default_factory=lambda: {

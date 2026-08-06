@@ -91,6 +91,13 @@ class FinetuneConfig:
     router_mix_renorm: bool = False
     """Rescale the routed mixture by 1/sqrt(sum w^2) so conditioning magnitude
     is invariant to routing entropy (exactly 1 at one-hot)."""
+    router_gate_mode: str = "softmax"
+    """"softmax" (competitive allocation, sum w = 1) or "sigmoid" (independent
+    accumulation gates). Sigmoid is incompatible with router_entropy_coef."""
+    router_gate_init_hi: float = 0.9
+    """Sigmoid mode: init gate value for the span/last-aligned candidate."""
+    router_gate_init_lo: float = 0.1
+    """Sigmoid mode: init gate value for all other candidates."""
     select_layer: int | None = None
     backbone_embedding_dim: int | None = None
     dit_num_layers: int | None = None
