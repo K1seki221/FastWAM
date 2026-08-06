@@ -95,6 +95,12 @@ for task in "${tasks[@]}"; do
   # NO_VIDEO=1 disables recording (the writer can kill forked sim workers on
   # some hosts; success rates don't need it).
   if [[ "${NO_VIDEO:-0}" == "1" ]]; then vdir="none"; else vdir="$EVAL_OUT/videos/${task:0:60}"; fi
+  # CRITICAL for parallel eval: CUDA_VISIBLE_DEVICES does NOT restrict NVIDIA
+  # EGL enumeration — without MUJOCO_EGL_DEVICE_ID every client renders on
+  # physical device 0 and concurrent clients SIGABRT in read_pixels. Pin the
+  # client to its own device and strip CVD so it cannot mislead.
+  egl_dev="${EGL_DEVICE_ID:-${CUDA_VISIBLE_DEVICES:-0}}"
+  env -u CUDA_VISIBLE_DEVICES MUJOCO_EGL_DEVICE_ID="$egl_dev" \
   "$CLIENT_VENV/bin/python" gr00t/eval/rollout_policy.py \
     --n-episodes "$N_EPISODES" --policy-client-host 127.0.0.1 --policy-client-port "$PORT" \
     --max-episode-steps "$MAX_STEPS" --env-name "gr1_unified/${task}_GR1ArmsAndWaistFourierHands_Env" \

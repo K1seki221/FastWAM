@@ -342,6 +342,17 @@ candidates).
 
 ## Evaluation
 
+- LOCAL GR1 sim eval (2026-08-06, working): setup via
+  `gr00t/eval/sim/robocasa-gr1-tabletop-tasks/setup_RoboCasaGR1TabletopTasks.sh`
+  (builds robocasa_uv/.venv + 8.8G assets in-repo; sanity test included).
+  Fleet driver: `/data/ruijiezhang/groot_runs/eval_fleet.sh` (8 ckpts x 6 PnP
+  tasks x 10 eps, GPUs 0-5, results -> /data/ruijiezhang/groot_evals/).
+  LESSONS: video recording needs ffmpeg on PATH (use
+  /data/ruijiezhang/env/ffmpeg7/bin) BUT multi-env AsyncVectorEnv workers
+  SIGABRT in robosuite read_pixels (EGL multi-context, spawn workers, NO
+  error text — expose with PYTHONFAULTHANDLER=1). Single-env rollouts are
+  stable => always N_ENVS=1 locally; NO_VIDEO=1 + `--video-dir none` (new
+  flag) skips recording. Smoke B ckpt: PnPCanToDrawer 1/2 in first try.
 - LIBERO 40-task: `scripts/groot_fuyao_eval.sh` (`CKPT=<checkpoint dir>`).
 - RoboCasa GR1-tabletop 24-task: `scripts/groot_fuyao_eval_gr1.sh`
   (server + robocasa client venv; see `12_groot_fuyao_runbook.md` for the
