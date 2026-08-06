@@ -177,8 +177,15 @@ baseline; NOT magnitude-comparable with softmax arms by construction.
 - Telemetry: RouterLLM/gate_sum (learned conditioning budget per block; the
   headline sigmoid metric), gate_min (dead-gate watch); entropy key becomes
   summed Bernoulli entropy; w_mean_L*/sqrt_sum_w2/rms_mix unchanged.
-- Arm S = `pilot_S_sigmoid_k4` (launcher arm S, pcproj on, K=4, router lr
-  2e-3, port 29532): AUTO-LAUNCHES on GPU 7 when B finishes (watcher armed).
+- USER DESIGN DISCUSSION (2026-08-05 late): baselines = Y (last+proj) and
+  A_pcproj (span+proj, PRIMARY bar). First sigmoid experiment = the
+  MAGNITUDE question, two arms, both identity-accumulate, gate lr = DiT lr
+  1e-4 (not 2e-3 — note sigmoid grads carry g(1-g)~0.09 factor, so
+  effective steps are small), no dead-gate insurance:
+  * `pilot_S_sigmoid_k4_free` (GPU 2, port 29533): magnitude free.
+  * `pilot_S_sigmoid_k4_renorm` (GPU 5, port 29534): + --router-mix-renorm.
+  Z and A_hard were killed by the user to free those GPUs (projector-less
+  ladder rungs culled; partial curves on wandb).
 - Dead-gate risk note: sigmoid grad ~ g(1-g) vanishes at BOTH rails — watch
   gate_min; a gate that closes early may never reopen.
 
