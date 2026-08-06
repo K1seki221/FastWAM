@@ -193,6 +193,12 @@ baseline; NOT magnitude-comparable with softmax arms by construction.
   * `pilot_S_sigmoid_k4_open_free` (GPU 7 after B, port 29535)
   * `pilot_S_sigmoid_k4_open_renorm` (GPU 6 after D, port 29536)
   2x2 sigmoid matrix complete: {identity-accumulate, open} x {free, renorm}.
+- THIRD sigmoid pair (2026-08-06, gate-LR sweep; 10K-run finding: at gate lr
+  1e-4 the g(1-g)~0.09-0.25 factor left gates nearly frozen): gate LR 5e-3,
+  open init 0.5, renorm ON:
+  * `pilot_S_sigmoid_k4_open_renorm_glr5e3` (GPU 6, port 29537)
+  * `pilot_S_sigmoid_k28_open_renorm_glr5e3` (GPU 7, port 29538, K=28 pool)
+  Launcher gained PILOT_NAME / PILOT_LAYERS overrides.
   Z and A_hard were killed by the user to free those GPUs (projector-less
   ladder rungs culled; partial curves on wandb).
 - Dead-gate risk note: sigmoid grad ~ g(1-g) vanishes at BOTH rails — watch

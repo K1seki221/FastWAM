@@ -69,9 +69,11 @@ case "$arm" in
   S) name=pilot_S_sigmoid_k4 ;;
 esac
 name="$name${PILOT_SUFFIX:-}"
+name="${PILOT_NAME:-$name}"
 gpu="${PILOT_GPU:-$gpu}"
 port="${PILOT_PORT:-$port}"
 rlr="${PILOT_ROUTER_LR:-$rlr}"
+layers="${PILOT_LAYERS:-$layers}"
 init="$init ${PILOT_EXTRA:-}"
 # ROUTER_PCPROJ=1 => per-candidate identity-init proj adapters (v1.5-lite)
 [[ "${ROUTER_PCPROJ:-0}" == "1" && "$use_router" == "1" ]] && init="$init --router-candidate-proj"
