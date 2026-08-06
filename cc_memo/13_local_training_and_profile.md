@@ -199,6 +199,19 @@ baseline; NOT magnitude-comparable with softmax arms by construction.
   * `pilot_S_sigmoid_k4_open_renorm_glr5e3` (GPU 6, port 29537)
   * `pilot_S_sigmoid_k28_open_renorm_glr5e3` (GPU 7, port 29538, K=28 pool)
   Launcher gained PILOT_NAME / PILOT_LAYERS overrides.
+- Arm T = `pilot_T_token_k4` (GPU 1, port 29539, launcher arm T + pcproj):
+  PER-TOKEN content routing (user-approved design): score[b,k,s] =
+  logits[b,k] + v_b.x_k[s]/sqrt(D), zero-init per-block probes, uniform
+  logits prior, softmax per token, NO renorm, premixed once per backbone
+  pass. Design notes: DiT-queried variant REJECTED because flow matching
+  trains one random-t step and training-time DiT states are noise-dominated
+  (Beta-skewed to high noise) — a DiT-state query is mostly untrainable;
+  denoise-step (temb) query also deferred per user. T starts bit-identical
+  to B => T-vs-B isolates content-dependence. Watch
+  RouterLLM/alpha_token_std: ~0 means content routing unused.
+- Arm T_k28 = `pilot_T_token_k28` (GPU 5, port 29540): T with the full
+  candidate pool 1..28 (uniform prior 1/28 per token; 28 pcproj adapters).
+  T_k28-vs-D isolates per-token routing at K=28; T_k28-vs-T_k4 pool size.
   Z and A_hard were killed by the user to free those GPUs (projector-less
   ladder rungs culled; partial curves on wandb).
 - Dead-gate risk note: sigmoid grad ~ g(1-g) vanishes at BOTH rails — watch
