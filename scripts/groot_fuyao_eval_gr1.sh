@@ -72,6 +72,9 @@ fi
 
 cd "$GROOT"
 echo "[eval-gr1] starting server for $CKPT (port $PORT)"
+# Cap server CPU threads + run nice: the zmq serve loop busy-spins across
+# all cores otherwise (~800% CPU) and starves co-located training jobs.
+nice -n 15 env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 \
 "$VENV_DIR/bin/python" gr00t/eval/run_gr00t_server.py \
   --model-path "$CKPT" --embodiment-tag ROBOCASA_GR1_TABLETOP --use-sim-policy-wrapper \
   --port "$PORT" > "$EVAL_OUT/logs/server.log" 2>&1 &
