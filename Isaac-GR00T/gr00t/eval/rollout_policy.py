@@ -558,7 +558,11 @@ def run_gr00t_sim_policy(
 
     embodiment_tag = get_embodiment_tag_from_env_name(env_name)
 
-    if video_dir is None:
+    # "none"/"off" disables recording entirely (VideoConfig(video_dir=None)
+    # skips the video wrapper); None keeps the historical auto-/tmp path.
+    if isinstance(video_dir, str) and video_dir.lower() in ("none", "off"):
+        video_dir = None
+    elif video_dir is None:
         if model_path:
             parts = model_path.split("/")
             model_slug = parts[-3] if len(parts) >= 3 else parts[-1]
@@ -617,7 +621,8 @@ def run_gr00t_sim_policy(
             seed=seed,
             robocasa_split=robocasa_split,
         )
-        print("Video saved to: ", wrapper_configs.video.video_dir)
+        if wrapper_configs.video.video_dir is not None:
+            print("Video saved to: ", wrapper_configs.video.video_dir)
         return results
 
 

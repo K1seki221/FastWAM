@@ -92,11 +92,14 @@ echo "task,success_rate" > "$csv"
 for task in "${tasks[@]}"; do
   log="$EVAL_OUT/logs/${task:0:90}.log"
   echo "[eval-gr1] $task"
+  # NO_VIDEO=1 disables recording (the writer can kill forked sim workers on
+  # some hosts; success rates don't need it).
+  if [[ "${NO_VIDEO:-0}" == "1" ]]; then vdir="none"; else vdir="$EVAL_OUT/videos/${task:0:60}"; fi
   "$CLIENT_VENV/bin/python" gr00t/eval/rollout_policy.py \
     --n-episodes "$N_EPISODES" --policy-client-host 127.0.0.1 --policy-client-port "$PORT" \
     --max-episode-steps "$MAX_STEPS" --env-name "gr1_unified/${task}_GR1ArmsAndWaistFourierHands_Env" \
     --n-action-steps "$N_ACTION_STEPS" --n-envs "$N_ENVS" \
-    --video-dir "$EVAL_OUT/videos/${task:0:60}" > "$log" 2>&1
+    --video-dir "$vdir" > "$log" 2>&1
   rc=$?
   sr=$(grep -a "success rate:" "$log" | tail -1 | grep -oE "[0-9.]+$" || echo "NA")
   [[ $rc -ne 0 ]] && sr="ERR"
