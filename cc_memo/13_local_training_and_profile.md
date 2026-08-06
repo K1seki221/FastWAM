@@ -184,6 +184,15 @@ baseline; NOT magnitude-comparable with softmax arms by construction.
   effective steps are small), no dead-gate insurance:
   * `pilot_S_sigmoid_k4_free` (GPU 2, port 29533): magnitude free.
   * `pilot_S_sigmoid_k4_renorm` (GPU 5, port 29534): + --router-mix-renorm.
+  Init telemetry verified: gate_sum 1.2000 exact, free rms_mix 1.068,
+  renorm rms_mix 1.167 (= 1.068/0.917 — the overcorrection nuance live).
+- SECOND sigmoid pair (user-ordered, auto-launch when B/D finish ~7h):
+  OPEN-EXPLORATION init = all gates 0.5 (hi=lo=0.5; max-gradient point;
+  NOTE at all-0.5 sqrt(sum g^2)=1 so renorm is a NO-OP at init, engages as
+  gates differentiate; both start ~1.5x baseline loudness):
+  * `pilot_S_sigmoid_k4_open_free` (GPU 7 after B, port 29535)
+  * `pilot_S_sigmoid_k4_open_renorm` (GPU 6 after D, port 29536)
+  2x2 sigmoid matrix complete: {identity-accumulate, open} x {free, renorm}.
   Z and A_hard were killed by the user to free those GPUs (projector-less
   ladder rungs culled; partial curves on wandb).
 - Dead-gate risk note: sigmoid grad ~ g(1-g) vanishes at BOTH rails — watch
