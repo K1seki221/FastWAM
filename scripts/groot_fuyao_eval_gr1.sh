@@ -100,13 +100,31 @@ for task in "${tasks[@]}"; do
   # physical device 0 and concurrent clients SIGABRT in read_pixels. Pin the
   # client to its own device and strip CVD so it cannot mislead.
   egl_dev="${EGL_DEVICE_ID:-${CUDA_VISIBLE_DEVICES:-0}}"
-  env -u CUDA_VISIBLE_DEVICES MUJOCO_EGL_DEVICE_ID="$egl_dev" \
-  "$CLIENT_VENV/bin/python" gr00t/eval/rollout_policy.py \
-    --n-episodes "$N_EPISODES" --policy-client-host 127.0.0.1 --policy-client-port "$PORT" \
-    --max-episode-steps "$MAX_STEPS" --env-name "gr1_unified/${task}_GR1ArmsAndWaistFourierHands_Env" \
-    --n-action-steps "$N_ACTION_STEPS" --n-envs "$N_ENVS" \
-    --video-dir "$vdir" > "$log" 2>&1
-  rc=$?
+  # Cross-process creation lock: concurrent EGL context creation (even on
+  # distinct devices) collides with other clients on this host. Hold a global
+  # lock through env construction + first renders, then release — steady-state
+  # rendering may overlap.
+  # Concurrent EGL renderers on this host collide sporadically (silent
+  # SIGABRT in read_pixels) — both at context creation AND mid-run. The
+  # creation lock narrows the window; MAX_ATTEMPTS retries absorb the rest.
+  rc=1
+  for attempt in $(seq 1 "${MAX_ATTEMPTS:-3}"); do
+    exec 9>/tmp/groot_egl_create.lock
+    flock -w 1800 9
+    env -u CUDA_VISIBLE_DEVICES MUJOCO_EGL_DEVICE_ID="$egl_dev" \
+    "$CLIENT_VENV/bin/python" gr00t/eval/rollout_policy.py \
+      --n-episodes "$N_EPISODES" --policy-client-host 127.0.0.1 --policy-client-port "$PORT" \
+      --max-episode-steps "$MAX_STEPS" --env-name "gr1_unified/${task}_GR1ArmsAndWaistFourierHands_Env" \
+      --n-action-steps "$N_ACTION_STEPS" --n-envs "$N_ENVS" \
+      --video-dir "$vdir" > "$log" 2>&1 &
+    client_pid=$!
+    sleep "${EGL_CREATE_GRACE:-90}"
+    flock -u 9
+    wait $client_pid
+    rc=$?
+    [ $rc -eq 0 ] && break
+    echo "[eval-gr1]   attempt $attempt failed (rc=$rc), retrying $task"
+  done
   sr=$(grep -a "success rate:" "$log" | tail -1 | grep -oE "[0-9.]+$" || echo "NA")
   [[ $rc -ne 0 ]] && sr="ERR"
   echo "$task,$sr" >> "$csv"
