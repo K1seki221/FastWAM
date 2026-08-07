@@ -385,3 +385,32 @@ candidates).
 - `fuyao deploy` snapshots the *cwd* — submit via `scripts/submit_fuyao_groot.sh`
   (deploys from a tiny temp dir; never run raw deploy inside the repo).
 - Shared host network namespace on fuyao → eval server ports are randomized.
+
+
+## First-wave pilot EVAL results (2026-08-06, complete)
+
+6 trained PnP tasks x 10 eps, ckpt-10000, GR1 sim single-lane (EGL constraint).
+Final means: H(mix-renorm) .567 | E*(ext) .467 | So(sigmoid open free) .450 |
+Y(last+proj BASELINE) .433 | B .400 | G .400 | D .383 | Si .383 | F*(ext) .383 |
+A(span BASELINE) .333 | Sr .333 | Sn .300.
+
+Findings:
+1. H is the only arm clearly above the incumbent baseline (+13.4 pts; 34/60
+   vs 26/60). Same config as B except 1/sqrt(sum w^2) mix rescale.
+2. Uncompensated learned routing (B/D) does NOT beat the last-layer
+   incumbent. Span-aligned routing (A/Si/Sr) is the WORST direction.
+3. Loudness pattern: loud arms (H ~1.55x early, So ~1.58x) hold ranks 1-2;
+   attenuated arms cluster below baseline. "Early conditioning scale matters
+   for from-scratch DiT" is a live alternative mechanism to compensation
+   dynamics — arm X (H-exact, measured-energy renorm to exactly 1.0)
+   discriminates.
+4. NOISE CALIBRATION: So vs Sn are near-functional clones yet differ by 15
+   pts (.450/.300) — the total noise floor (training chaos + 60-ep eval) is
+   ~15 pts. H-vs-Y (+13.4) is AT that edge: needs X corroboration + 30-ep
+   re-eval before any paper claim. Zero-shot on the 18 untrained Posttrain
+   tasks: 0.0 across the board (B's accidental 24-task sweep).
+5. G's entropy anneal ended ~uniform but scored .400 — annealed exploration
+   gave no benefit; NOTE its anneal ended together with cosine LR decay
+   (design flaw: never let those end simultaneously).
+Second wave (T_k4, T_k28, sigmoid glr5e3 x2, X) trains overnight; X
+auto-evals when the lane frees.
