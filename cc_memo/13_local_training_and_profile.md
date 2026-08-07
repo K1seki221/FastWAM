@@ -420,8 +420,12 @@ auto-evals when the lane frees.
 
 180 eps/arm (6 tasks x 30 eps), ckpt-10000, single GPU-0 render lane.
 Board: X(H-exact) .483 | Y(BASELINE) .467 | H .439 | Sg4 .406 | Sg28 .400 |
-B .394 | So .378 | T_k28 .317 | T_k4 .306. (10-ep only: G .400, D .383,
-Si .383, A .333, Sr .333, Sn .300; ext: E* .467, F* .383.)
+B .394 | So .378 | A(BASELINE 2, added 08-07) .350 | T_k28 .317 | T_k4 .306.
+(10-ep only: G .400, D .383, Si .383, Sr .333, Sn .300; ext: E* .467,
+F* .383.) A at 30 eps confirms its 10-ep .333: vs Y gap 11.7pp, z=2.25,
+nominal p=.024 — but as a designed baseline pair (planned comparison) this
+is the fairest read; under a 9-arm Bonferroni it is marginal (~.22).
+Last-layer > span-fixed is now the best-supported baseline ordering.
 CSV: /data/ruijiezhang/groot_evals/final_table.csv (+ per-arm pilot_*_e30/).
 
 Statistics (paired per-task + pooled two-proportion, independently verified):
