@@ -469,3 +469,28 @@ telemetry-confirmed — NOT on success rate; X and H are indistinguishable).
 Add H only if the L2-vs-exact question must stay testable at scale. Parked
 full-scale runs at checkpoint-6000 predate the pcproj/renorm configs and
 cannot resume into X/Y arms as-is.
+
+
+## SCALE PHASE: 30K steps x 12 tasks (launched 2026-08-07)
+
+Four arms, pilot recipe otherwise (eff batch 256, cosine over 30K, pcproj,
+router lr 2e-3 / frozen for Y+A), SAVE_STEPS=5000 limit 2:
+- scale30k12_X_k4_emanorm  GPU4  H-exact router K4 {7,14,21,28}
+- scale30k12_Y_last_proj   GPU5  last-layer baseline
+- scale30k12_A_fixed_span  GPU6  span-fixed baseline
+- scale30k12_X_k28_emanorm GPU7  H-exact router K28 (all layers)
+
+DATA: 12 tasks = 6 PnP*Close + 6 diverse Posttrain (CuttingboardToBasket,
+CuttingboardToPot, PlacematToBowl, PlacematToTieredshelf, PlateToPan,
+TrayToCardboardbox — covers all 4 source families, 6 receptacles). Symlink
+dir /data/ruijiezhang/gr1_12task/ is the glob (launcher takes GR1_DATA_GLOB;
+PILOT_MAX_STEPS/PILOT_SAVE_STEPS now override the launcher). 12k episodes
+=> 30K steps ~ 1.6-2.6 epochs. The 12 UNUSED Posttrain tasks are now a
+NEAR-distribution zero-shot set (novel combos of seen surfaces/receptacles).
+A 6-task 30K wave was started first and killed 40 min in (user call:
+12-task replaces it; wandb has the dead scale30k_* stubs).
+
+EVAL: /data/ruijiezhang/groot_runs/scale30k12_eval60.sh armed on GPU-0 lane
+— waits for checkpoint-30000, then serial 12 tasks x 60 eps per arm
+(720 eps/arm, SE ~1.9pp; ~10h/arm). Status -> groot_evals/eval60.status.
+ETA: training ~36h, evals drain ~40h after.
