@@ -119,9 +119,13 @@ class Gr00tN1d7Config(PretrainedConfig):
     # coef(t) = coef * (1 - step/max_steps). Zero-gradient at exact uniform;
     # resists premature commitment early, fades to let the task loss commit.
     router_entropy_coef: float = 0.0
-    # Rescale the mixture by 1/sqrt(sum w^2): decouples conditioning magnitude
-    # from routing entropy. Exactly 1 at one-hot (stock identity preserved).
+    # Rescale the routed mixture. Mode "l2": divide by sqrt(sum w^2) — the
+    # DECORRELATED-prediction compensation (overcompensates when candidates
+    # correlate; measured rho~0.46 here). Mode "ema": rescale by measured
+    # per-block mixture energy (EMA, no_grad) toward unit per-dim RMS — true
+    # magnitude-invariant routing ("H-exact").
     router_mix_renorm: bool = False
+    router_mix_renorm_mode: str = "l2"
     # Per-token routing: score[b,k,s] = logits[b,k] + v_b . x_k[s]/sqrt(D)
     # with a zero-init learned probe v_b per cross block. Premixed once per
     # backbone pass (no DiT / denoise-step dependence).

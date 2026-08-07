@@ -91,6 +91,7 @@ if __name__ == "__main__":
     config.model.router_candidate_proj = ft_config.router_candidate_proj
     config.model.router_entropy_coef = ft_config.router_entropy_coef
     config.model.router_mix_renorm = ft_config.router_mix_renorm
+    config.model.router_mix_renorm_mode = ft_config.router_mix_renorm_mode
     config.model.router_token_query = ft_config.router_token_query
     config.model.router_gate_mode = ft_config.router_gate_mode
     config.model.router_gate_init_hi = ft_config.router_gate_init_hi

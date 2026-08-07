@@ -56,6 +56,9 @@ case "$arm" in
   # T: per-token content routing (zero-init probes v_b + uniform logits prior,
   # premixed, no renorm). Launch with ROUTER_PCPROJ=1.
   T) gpu=1; port=29539; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-token-query" ;;
+  # X: "H-exact" — H's config but measured-energy (EMA) compensation instead
+  # of the L2 weight-norm prediction. Launch with ROUTER_PCPROJ=1.
+  X) gpu=4; port=29541; layers="7 14 21 28"; init="--router-init-mode span --router-init-bias 0.0 --router-mix-renorm --router-mix-renorm-mode ema" ;;
   *) echo "unknown arm $arm" >&2; exit 1 ;;
 esac
 case "$arm" in
@@ -71,6 +74,7 @@ case "$arm" in
   Y) name=pilot_Y_last_proj ;;
   S) name=pilot_S_sigmoid_k4 ;;
   T) name=pilot_T_token_k4 ;;
+  X) name=pilot_X_uniform_k4_emanorm ;;
 esac
 name="$name${PILOT_SUFFIX:-}"
 name="${PILOT_NAME:-$name}"

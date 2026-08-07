@@ -44,7 +44,7 @@ class ConditionRouter(nn.Module):
     close to the stock wiring.
     """
 
-    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False, mix_renorm: bool = False, gate_mode: str = "softmax", gate_init_hi: float = 0.9, gate_init_lo: float = 0.1, token_query: bool = False):
+    def __init__(self, num_cross_blocks: int, num_candidates: int, dim: int, init_bias: float, init_mode: str = "last", frozen: bool = False, candidate_proj: bool = False, mix_renorm: bool = False, gate_mode: str = "softmax", gate_init_hi: float = 0.9, gate_init_lo: float = 0.1, token_query: bool = False, mix_renorm_mode: str = "l2"):
         super().__init__()
         self.norms = nn.ModuleList([nn.LayerNorm(dim) for _ in range(num_candidates)])
         # Optional per-candidate linear adapters (identity-init): each VLM depth
@@ -69,6 +69,15 @@ class ConditionRouter(nn.Module):
         # uniform K=4 ~0.5, K=28 ~0.19). Deterministic, exactly 1 at one-hot
         # => preserves exact stock identity at hard init.
         self.mix_renorm = mix_renorm
+        assert mix_renorm_mode in ("l2", "ema"), mix_renorm_mode
+        self.mix_renorm_mode = mix_renorm_mode
+        if mix_renorm and mix_renorm_mode == "ema":
+            # Measured per-block per-dim mixture energy (H-exact): EMA under
+            # no_grad, updated in training only, -1 = uninitialized sentinel
+            # (first forward seeds it with the batch estimate). Persisted in
+            # checkpoints so eval uses the trained energy estimate.
+            self.register_buffer("ema_energy", torch.full((num_cross_blocks,), -1.0))
+            self.ema_momentum = 0.99
         assert gate_mode in ("softmax", "sigmoid"), gate_mode
         self.gate_mode = gate_mode
         if gate_mode == "sigmoid":
@@ -118,7 +127,7 @@ class ConditionRouter(nn.Module):
             else:
                 alpha = scores.softmax(dim=2)
             mixed = torch.einsum("bnks,bksd->bnsd", alpha, normed)
-            if self.mix_renorm:
+            if self.mix_renorm and self.mix_renorm_mode == "l2":
                 scale = alpha.pow(2).sum(dim=2).clamp_min(1e-9).rsqrt()  # [B, N, S]
                 mixed = mixed * scale.unsqueeze(-1)
             with torch.no_grad():
@@ -130,9 +139,20 @@ class ConditionRouter(nn.Module):
             else:
                 weights = self.logits.softmax(dim=-1).to(normed.dtype)  # [N, K]
             mixed = torch.einsum("nk,bksd->bnsd", weights, normed)
-            if self.mix_renorm:
+            if self.mix_renorm and self.mix_renorm_mode == "l2":
                 scale = weights.pow(2).sum(dim=-1).clamp_min(1e-9).rsqrt()  # [N]
                 mixed = mixed * scale.view(1, -1, 1, 1)
+        if self.mix_renorm and self.mix_renorm_mode == "ema":
+            # H-exact: rescale by MEASURED per-block per-dim energy (EMA,
+            # no_grad, train-updated; sentinel -1 seeds from first batch).
+            with torch.no_grad():
+                cur = mixed.detach().float().pow(2).mean(dim=(0, 2, 3))  # [N]
+                if bool((self.ema_energy < 0).any()):
+                    self.ema_energy.copy_(cur)
+                elif self.training:
+                    self.ema_energy.mul_(self.ema_momentum).add_(cur * (1 - self.ema_momentum))
+                scale = (self.ema_energy + 1e-8).rsqrt().to(mixed.dtype)
+            mixed = mixed * scale.view(1, -1, 1, 1)
         # Actual conditioning loudness (post-rescale if enabled): lets curves
         # separate "which layers" from "how loud" (mix of unit-RMS candidates
         # shrinks toward sqrt(sum w^2) as entropy rises).
@@ -262,6 +282,7 @@ class Gr00tN1d7ActionHead(nn.Module):
                 gate_init_hi=getattr(config, "router_gate_init_hi", 0.9),
                 gate_init_lo=getattr(config, "router_gate_init_lo", 0.1),
                 token_query=getattr(config, "router_token_query", False),
+                mix_renorm_mode=getattr(config, "router_mix_renorm_mode", "l2"),
             )
             if (
                 getattr(config, "router_gate_mode", "softmax") == "sigmoid"
