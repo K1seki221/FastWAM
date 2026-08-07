@@ -414,3 +414,54 @@ Findings:
    (design flaw: never let those end simultaneously).
 Second wave (T_k4, T_k28, sigmoid glr5e3 x2, X) trains overnight; X
 auto-evals when the lane frees.
+
+
+## FINAL 30-episode verdict (2026-08-07, pilot campaign COMPLETE)
+
+180 eps/arm (6 tasks x 30 eps), ckpt-10000, single GPU-0 render lane.
+Board: X(H-exact) .483 | Y(BASELINE) .467 | H .439 | Sg4 .406 | Sg28 .400 |
+B .394 | So .378 | T_k28 .317 | T_k4 .306. (10-ep only: G .400, D .383,
+Si .383, A .333, Sr .333, Sn .300; ext: E* .467, F* .383.)
+CSV: /data/ruijiezhang/groot_evals/final_table.csv (+ per-arm pilot_*_e30/).
+
+Statistics (paired per-task + pooled two-proportion, independently verified):
+single-arm SE ~3.7pp; diff SE ~5.2pp => ~10.4pp needed for 2-sigma. NO pair
+among {X,Y,H,B} is distinguishable: X-Y +1.7pp (z=0.32, pure noise), X-H
++4.4pp (z=0.85), X-B +8.9pp (z=1.70, p=.089, best gap in study), Y-B +7.2pp
+(z=1.38). Resolving 5pp steps needs ~800+ eps/arm. X is the max of 9 arms
+=> its .483 is winner's-curse inflated; expect regression on re-measure.
+
+Findings (with adversarial-review hedges applied):
+1. NOTHING BEATS THE INCUMBENT. No routing variant is distinguishable from
+   Y; the only claim the data supports is "compensated routing reaches
+   statistical parity" — equivalence is NOT established (X-Y CI ~[-9,+12]pp).
+2. The ONLY Bonferroni-surviving result of the campaign: per-token routing
+   (T arms) is genuinely harmful vs Y (z~2.9-3.1, corrected p~.02-.04).
+   A(span fixed) is suggestive-worse (corrected p~.09). The sigmoid cluster
+   and "K=28 never helps" are no-evidence-of-benefit observations only.
+3. H-exact vs H (the approved question): YES at behavior level — identical
+   learned routing (both: L28 .41-.42 > L21 .24 > L07 .17 > L14 .16;
+   entropy 1.32/1.30 vs ln4=1.386; task loss .0237/.0238; same runtime).
+   Success-rate equivalence unresolved at pilot power. TELEMETRY: X pins
+   rms_mix at .93-1.00 per-block as designed (16k samples). H logs NO
+   rms_mix/sqrt_sum_w2 (keys were added post-H) — its predicted ~1.42-1.55x
+   overshoot is inferred from final weights, never measured.
+4. Loudness hypothesis (first-wave finding 3) resolved at point-estimate
+   level: exact-1.0 arm X tops the board while the loud arms (H, So) fell
+   back at 30 eps — the 10-ep loud-arm ranking was noise. The stronger
+   claim "routing penalty was a magnitude problem" was REFUTED in review:
+   B<H<X is consistent with magnitude compensation but each step is
+   non-significant and H-B reverses on 4/6 tasks.
+5. Free routers RE-DERIVE the incumbent: both X and H converge to favoring
+   L28 (w~.41) with soft mixing over the rest — the hand-picked last-layer
+   tap is also the router's own preference.
+6. Router preference caveat for the paper: high entropy (1.31 vs 1.386 max)
+   means routers stayed near-soft; 10K steps + cosine decay may simply not
+   be enough for commitment. Untested at 60K.
+
+60K decision: if the router line continues, promote Y + X (X on
+VERIFIED-MECHANISM grounds — its compensation behavior is the only one
+telemetry-confirmed — NOT on success rate; X and H are indistinguishable).
+Add H only if the L2-vs-exact question must stay testable at scale. Parked
+full-scale runs at checkpoint-6000 predate the pcproj/renorm configs and
+cannot resume into X/Y arms as-is.
