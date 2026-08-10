@@ -101,14 +101,14 @@ env \
   GR00T_BACKBONE_PATH="$GR00T_BACKBONE_PATH" \
   DATASET_GLOB="$GR1_DATA_GLOB" \
   EMBODIMENT_TAG=ROBOCASA_GR1_TABLETOP \
-  NUM_GPUS=1 CUDA_VISIBLE_DEVICES=$gpu MASTER_PORT=$port \
-  MAX_STEPS="${PILOT_MAX_STEPS:-10000}" GLOBAL_BATCH_SIZE=16 \
+  NUM_GPUS="${PILOT_NUM_GPUS:-1}" CUDA_VISIBLE_DEVICES=$gpu MASTER_PORT=$port \
+  MAX_STEPS="${PILOT_MAX_STEPS:-10000}" GLOBAL_BATCH_SIZE="${PILOT_GBS:-16}" \
   SAVE_STEPS="${PILOT_SAVE_STEPS:-2500}" SAVE_TOTAL_LIMIT=2 \
   USE_ROUTER=$use_router ROUTER_LR=$rlr ROUTER_LAYERS="$layers" \
   WANDB_MODE="${WANDB_MODE:-online}" \
   "${ld_env[@]}" \
   RUN_NAME=$name \
-  EXTRA_ARGS="--skip-weight-loading --tune-llm --tune-visual --backbone-lr 1e-5 --select-layer 28 --backbone-embedding-dim 2048 --dit-num-layers 28 --gradient_accumulation_steps 16 $init" \
+  EXTRA_ARGS="--skip-weight-loading --tune-llm --tune-visual --backbone-lr 1e-5 --select-layer 28 --backbone-embedding-dim 2048 --dit-num-layers 28 --gradient_accumulation_steps ${PILOT_ACCUM:-16} $init" \
   bash scripts/groot_fuyao_train.sh \
   > "$RUNS_ROOT/$name.log" 2>&1
 echo "PILOT $arm EXITED: $?" >> "$RUNS_ROOT/pilot.status"

@@ -541,6 +541,22 @@ drift scales with commitment). Task loss parity across all four arms
 Routers re-derive "late layers" but NOT "last layer only": the win is
 consistent with spreading conditioning over adjacent late layers.
 
+## FULL-CORPUS PHASE: 60K steps x 24 tasks, DDP x2 (launched 2026-08-10)
+
+Three arms (X_k4 dropped; routers tied, K28 kept as the stronger/general
+form), 2 GPUs each via DDP: scale60k24_X_k28_emanorm (GPU 2,3) |
+scale60k24_Y_last_proj (GPU 4,5) | scale60k24_A_fixed_span (GPU 6,7).
+Recipe: eff batch unchanged 256 = 32 global micro (16/GPU) x 8 accum
+(launcher: PILOT_NUM_GPUS/PILOT_GBS/PILOT_ACCUM added; per_device =
+GLOBAL_BATCH_SIZE // NUM_GPUS in experiment.py). 60K steps keeps the
+validated ~640K samples/task, ~2 epochs over 24k episodes. SAVE 10K,
+limit 2. Glob: gr1_unified.* (all 24). NOTE: no held-out Posttrain set
+remains — zero-shot claims need another corpus (user accepted).
+EVAL: scale60k24_eval60.sh armed (24 tasks x 60 eps = 1440 eps/arm,
+SE ~1.3pp; ~20h/arm serial GPU-0 lane; quiescence-guarded) ->
+eval60k24.status. ETA: train ~40h (DDP~2.3s/step), evals ~60h after.
+
+
 Paper-gate checklist (from review): (1) Can rechecks [running]; (2)
 leave-one-task-out table [done: X_k28-Y z=3.62 without Can, X_k4-A
 z=1.60]; (3) permutation contrast [done]; (4) seed replicate X_k28+Y
