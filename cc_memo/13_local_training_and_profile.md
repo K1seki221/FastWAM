@@ -494,3 +494,54 @@ EVAL: /data/ruijiezhang/groot_runs/scale30k12_eval60.sh armed on GPU-0 lane
 — waits for checkpoint-30000, then serial 12 tasks x 60 eps per arm
 (720 eps/arm, SE ~1.9pp; ~10h/arm). Status -> groot_evals/eval60.status.
 ETA: training ~36h, evals drain ~40h after.
+GOTCHA (2026-08-09): trainer writes checkpoint config.json FIRST; shards/
+optimizer/processor land minutes later. An eval launched off config.json
+existence loads a half-written ckpt and dies ("Unrecognized processing
+class"). Drivers now wait for 2-min write quiescence + processor_config.
+
+
+## SCALE VERDICT: 30K x 12 tasks, 60 eps (2026-08-10, campaign complete)
+
+Board (720 eps/arm, ckpt-30000): X_k28 .311 (PnP .303/Post .319) |
+X_k4 .296 (.308/.283) | A .233 (.197/.269) | Y .217 (.236/.197).
+
+FIRST ROUTER WIN, with hedges (adversarially reviewed):
+- Both routers > both baselines on pooled z (X_k28-Y +9.4pp z=4.07,
+  X_k28-A z=3.32, X_k4-Y z=3.44, X_k4-A z=2.69; all survive 6-test
+  Bonferroni). Task-paired tests: X_k28-Y t(11)=2.89; the weak leg is
+  X_k4-A (t=2.00, p~.07, ns). Pre-registered-style contrast
+  mean(routers)-mean(baselines) = +7.9pp, exact sign-flip permutation
+  p=.018 (12 tasks); still .035 excluding the anomalous Can task.
+- SINGLE SEED PER ARM: z covers eval sampling only (SE ~1.7pp/arm at 720
+  eps); the 2-over-2 clustering weakens but does not defeat the seed
+  objection (p~1/6 under arm exchangeability). Seed replicate (X_k28 + Y)
+  is the missing piece for a paper claim.
+- Cross-regime caveat: pilot->scale changed steps (10K->30K), tasks
+  (6->12), eps (30->60) together; "task diversity is the cause" is
+  HYPOTHESIS, not measurement. Degradation-vs-pilot is metric-dependent
+  (absolute pp: A dropped least; relative: routers dropped least).
+- Can->Drawer anomaly: BOTH baselines collapse (Y .033, A .000; Y also
+  Cup->Drawer .033) while both routers score .18-.32. Two independent
+  checkpoints failing identically points to a real fixed-tap failure
+  mode, not a corrupted ckpt; rechecks running (Y30k/Y25k/A30k fresh
+  60-ep Can evals -> groot_evals/recheck.status).
+- A-vs-Y: pilot's 11.7pp last-layer>span gap is GONE (+1.7pp, z=0.76).
+  Do not claim "tap doesn't matter": routers say depth matters a lot
+  (see below); claim only "neither fixed tap wins here".
+
+TELEMETRY (both routers, ckpt-30000): commitment finally emerged —
+K4 norm-entropy .758 (pilot .949), w_L28=.629 every block majority-
+incumbent; K28 norm-entropy .853, late-band L19-28 holds 70.2% of mass,
+monotone rise to L28, L25-27 shoulder (.372) outweighs L28 itself (.167);
+mid-layers L13-18 are the trough. rms_mix no longer pinned at 1.0: K4
+.846-.882, K28 .921-.955 (EMA renorm holds a stable band below unity;
+drift scales with commitment). Task loss parity across all four arms
+(.0129-.0132) — the success-rate gaps arise at ROLLOUT, not at fit.
+Routers re-derive "late layers" but NOT "last layer only": the win is
+consistent with spreading conditioning over adjacent late layers.
+
+Paper-gate checklist (from review): (1) Can rechecks [running]; (2)
+leave-one-task-out table [done: X_k28-Y z=3.62 without Can, X_k4-A
+z=1.60]; (3) permutation contrast [done]; (4) seed replicate X_k28+Y
+[NOT STARTED — needs 2 GPUs x 36h]; (5) report per-task CIs + Holm;
+(6) So/Sn twins on 12-task board for a seed-noise bound [optional].
