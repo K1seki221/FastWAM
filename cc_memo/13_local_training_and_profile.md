@@ -521,10 +521,11 @@ FIRST ROUTER WIN, with hedges (adversarially reviewed):
   HYPOTHESIS, not measurement. Degradation-vs-pilot is metric-dependent
   (absolute pp: A dropped least; relative: routers dropped least).
 - Can->Drawer anomaly: BOTH baselines collapse (Y .033, A .000; Y also
-  Cup->Drawer .033) while both routers score .18-.32. Two independent
-  checkpoints failing identically points to a real fixed-tap failure
-  mode, not a corrupted ckpt; rechecks running (Y30k/Y25k/A30k fresh
-  60-ep Can evals -> groot_evals/recheck.status).
+  Cup->Drawer .033) while both routers score .18-.32. RECHECKS CONFIRM
+  REAL (2026-08-10): fresh 60-ep re-runs reproduce it (Y30k .050,
+  A30k .000) and Y's ckpt-25000 also fails (.000) — a genuine fixed-tap
+  failure mode spanning checkpoints and eval runs, NOT an eval artifact
+  or corrupted save. Paper gate (1) CLOSED.
 - A-vs-Y: pilot's 11.7pp last-layer>span gap is GONE (+1.7pp, z=0.76).
   Do not claim "tap doesn't matter": routers say depth matters a lot
   (see below); claim only "neither fixed tap wins here".
