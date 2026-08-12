@@ -109,7 +109,11 @@ for task in "${tasks[@]}"; do
   # requested CUDA ordinal must be translated via EGL_CUDA_DEVICE_NV.
   export __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:-/usr/share/glvnd/egl_vendor.d/10_nvidia.json}"
   want_cuda="${EGL_DEVICE_ID:-${CUDA_VISIBLE_DEVICES:-0}}"
-  egl_dev=$("$CLIENT_VENV/bin/python" "$REPO_ROOT/scripts/egl_cuda_map.py" "$want_cuda" 2>/dev/null) || egl_dev="$want_cuda"
+  # env -u CUDA_VISIBLE_DEVICES is REQUIRED here: with CVD set, the driver
+  # renumbers EGL_CUDA_DEVICE_NV to process-visible ordinals and the lookup
+  # fails -> silent fallback -> renders land on the wrong physical GPU.
+  egl_dev=$(env -u CUDA_VISIBLE_DEVICES "$CLIENT_VENV/bin/python" "$REPO_ROOT/scripts/egl_cuda_map.py" "$want_cuda" 2>/dev/null) || { echo "[eval-gr1] WARN: EGL map failed for CUDA $want_cuda, using raw index" >&2; egl_dev="$want_cuda"; }
+  echo "[eval-gr1] render: CUDA $want_cuda -> EGL idx $egl_dev"
   # Cross-process creation lock: concurrent EGL context creation (even on
   # distinct devices) collides with other clients on this host. Hold a global
   # lock through env construction + first renders, then release — steady-state

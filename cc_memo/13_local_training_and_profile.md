@@ -559,13 +559,20 @@ EGL PARALLEL-EVAL MYSTERY SOLVED (2026-08-12, research + live-verified):
    (occupied by another user's 80GB sglang) => garbage scores + ERRs.
    FIX: scripts/egl_cuda_map.py translates via EGL_CUDA_DEVICE_NV;
    eval script does this automatically now.
-3. EGL device 0 (=CUDA3) is probed/initialized by EVERY starting
-   process's PyOpenGL default-display check => a lane rendering there
-   dies (SIGABRT in read_pixels) whenever siblings start; other lanes
-   are stable. Verified: crash follows the lane across tasks; two
-   concurrent contexts on one NON-zero device are clean.
-   RULE: in parallel mode never render on EGL idx 0; CUDA3 may still
-   host policy servers (no EGL use).
+3. CORRECTION (same day, verified): the "EGL device 0 hazard" theory was
+   WRONG. The real bug: the CUDA->EGL map lookup ran WITH
+   CUDA_VISIBLE_DEVICES set, and under CVD the driver RENUMBERS
+   EGL_CUDA_DEVICE_NV to process-visible ordinals => lookup fails =>
+   silent fallback to the raw index. So "lane CUDA2" rendered on EGL
+   idx2=CUDA0 (other user's sglang GPU: survived, slow) and "lane CUDA3"
+   rendered on EGL idx3=CUDA1 (other user's 100%-util SpecForge GPU:
+   deterministic SIGABRT). FIX: run egl_cuda_map.py under
+   `env -u CUDA_VISIBLE_DEVICES` (eval script does this now and echoes
+   the mapping: "[eval-gr1] render: CUDA X -> EGL idx Y" — CHECK IT).
+   Enumeration orders: EGL = minor-number order, CUDA/nvidia-smi = PCI
+   order; that is the whole scramble. n_envs=5 batch eval (AsyncVectorEnv
+   spawn) works fine with the pin + correct mapping (15/15 eps, 4x
+   throughput/lane); equivalence A/B vs n_envs=1 still pending.
 Parallel driver: /data/ruijiezhang/groot_runs/scale60k24_eval_parallel.sh
 (task-shards 24 tasks over free GPUs 2-7, render redirect 3->2, per-lane
 shader cache, ERR resweep, ~4h/arm at 5-6 lanes vs 20h serial).
