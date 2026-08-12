@@ -102,7 +102,14 @@ for task in "${tasks[@]}"; do
   # EGL enumeration — without MUJOCO_EGL_DEVICE_ID every client renders on
   # physical device 0 and concurrent clients SIGABRT in read_pixels. Pin the
   # client to its own device and strip CVD so it cannot mislead.
-  egl_dev="${EGL_DEVICE_ID:-${CUDA_VISIBLE_DEVICES:-0}}"
+  # 2026-08-12 findings: (a) with both NVIDIA and Mesa glvnd ICDs installed,
+  # unpinned enumeration returns 16 devices and loads Mesa's dri2 path on
+  # NVIDIA nodes — the documented 570-series concurrent-EGL crasher. Pin the
+  # NVIDIA ICD. (b) EGL device order is PCI-bus order, NOT CUDA order — the
+  # requested CUDA ordinal must be translated via EGL_CUDA_DEVICE_NV.
+  export __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:-/usr/share/glvnd/egl_vendor.d/10_nvidia.json}"
+  want_cuda="${EGL_DEVICE_ID:-${CUDA_VISIBLE_DEVICES:-0}}"
+  egl_dev=$("$CLIENT_VENV/bin/python" "$REPO_ROOT/scripts/egl_cuda_map.py" "$want_cuda" 2>/dev/null) || egl_dev="$want_cuda"
   # Cross-process creation lock: concurrent EGL context creation (even on
   # distinct devices) collides with other clients on this host. Hold a global
   # lock through env construction + first renders, then release — steady-state
