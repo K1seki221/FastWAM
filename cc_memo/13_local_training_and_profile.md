@@ -546,6 +546,30 @@ GOTCHA (2026-08-12): NVLink pairs on this box are (0,1), (2,3), (4,6),
 pair (e.g. 4,5 or 6,7) runs ~1.46x slower (3.6 vs 2.47 s/step on the
 3.2B model). Always check `nvidia-smi topo -m` before pairing GPUs.
 
+EGL PARALLEL-EVAL MYSTERY SOLVED (2026-08-12, research + live-verified):
+1. Box has BOTH glvnd ICDs (10_nvidia.json + 50_mesa.json): unpinned EGL
+   enumeration returns 16 devices (8 real + 8 Mesa /dev/dri dupes) and
+   loads Mesa's dri2 path on NVIDIA nodes — documented 570-driver-series
+   concurrent crasher. FIX: __EGL_VENDOR_LIBRARY_FILENAMES=
+   /usr/share/glvnd/egl_vendor.d/10_nvidia.json (now in eval script).
+2. EGL device order is PCI-bus, NOT CUDA: idx0=CUDA3, idx1=CUDA2,
+   idx2=CUDA0, idx3=CUDA1, idx4=CUDA6, idx5=CUDA7, idx6=CUDA4, idx7=CUDA5.
+   MUJOCO_EGL_DEVICE_ID indexes the EGL list => historic "GPU0 lane"
+   actually rendered on CUDA3; the 08-12 "GPU2" eval rendered on CUDA0
+   (occupied by another user's 80GB sglang) => garbage scores + ERRs.
+   FIX: scripts/egl_cuda_map.py translates via EGL_CUDA_DEVICE_NV;
+   eval script does this automatically now.
+3. EGL device 0 (=CUDA3) is probed/initialized by EVERY starting
+   process's PyOpenGL default-display check => a lane rendering there
+   dies (SIGABRT in read_pixels) whenever siblings start; other lanes
+   are stable. Verified: crash follows the lane across tasks; two
+   concurrent contexts on one NON-zero device are clean.
+   RULE: in parallel mode never render on EGL idx 0; CUDA3 may still
+   host policy servers (no EGL use).
+Parallel driver: /data/ruijiezhang/groot_runs/scale60k24_eval_parallel.sh
+(task-shards 24 tasks over free GPUs 2-7, render redirect 3->2, per-lane
+shader cache, ERR resweep, ~4h/arm at 5-6 lanes vs 20h serial).
+
 ## FULL-CORPUS PHASE: 60K steps x 24 tasks, DDP x2 (launched 2026-08-10)
 
 Three arms (X_k4 dropped; routers tied, K28 kept as the stronger/general
