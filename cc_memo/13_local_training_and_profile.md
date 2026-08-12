@@ -541,6 +541,11 @@ drift scales with commitment). Task loss parity across all four arms
 Routers re-derive "late layers" but NOT "last layer only": the win is
 consistent with spreading conditioning over adjacent late layers.
 
+GOTCHA (2026-08-12): NVLink pairs on this box are (0,1), (2,3), (4,6),
+(5,7) — NOT adjacent-numbered on NUMA node 1. DDP x2 on a non-NVLink
+pair (e.g. 4,5 or 6,7) runs ~1.46x slower (3.6 vs 2.47 s/step on the
+3.2B model). Always check `nvidia-smi topo -m` before pairing GPUs.
+
 ## FULL-CORPUS PHASE: 60K steps x 24 tasks, DDP x2 (launched 2026-08-10)
 
 Three arms (X_k4 dropped; routers tied, K28 kept as the stronger/general
