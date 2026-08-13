@@ -125,6 +125,30 @@ for task in "${tasks[@]}"; do
   for attempt in $(seq 1 "${MAX_ATTEMPTS:-3}"); do
     exec 9>/tmp/groot_egl_create.lock
     flock -w 1800 9
+    if [[ "${CLIENT_DOCKER:-0}" == "1" ]]; then
+      # Containerized client: single-GPU namespace => EGL sees exactly one
+      # device (idx 0); no ICD pin or index translation needed. RENDER_GPU
+      # is the host GPU for --gpus. Container is named so the watchdog can
+      # docker-kill it (unix signals don't reach the containerized client).
+      cname="eglclient_${PORT}_${attempt}"
+      docker rm -f "$cname" >/dev/null 2>&1 || true
+      setsid docker run --rm --name "$cname" --gpus "device=${RENDER_GPU:-$egl_dev}" \
+        --network host --user "$(id -u):$(id -g)" \
+        -v /home/ruijiezhang/FastWAM:/home/ruijiezhang/FastWAM \
+        -v /home/ruijiezhang/miniconda3:/home/ruijiezhang/miniconda3:ro \
+        -v /data/ruijiezhang:/data/ruijiezhang \
+        -e HOME=/tmp -e MUJOCO_GL=egl -e PYOPENGL_PLATFORM=egl \
+        -e MUJOCO_EGL_DEVICE_ID=0 -e PYTHONFAULTHANDLER=1 \
+        -e LD_PRELOAD=/data/ruijiezhang/env/ffmpeg7/lib/libstdc++.so.6 \
+        -w "$GROOT" \
+        eglbox:latest \
+        "$CLIENT_VENV/bin/python" gr00t/eval/rollout_policy.py \
+        --n-episodes "$N_EPISODES" --policy-client-host 127.0.0.1 --policy-client-port "$PORT" \
+        --max-episode-steps "$MAX_STEPS" --env-name "gr1_unified/${task}_GR1ArmsAndWaistFourierHands_Env" \
+        --n-action-steps "$N_ACTION_STEPS" --n-envs "$N_ENVS" \
+        --video-dir "$vdir" > "$log" 2>&1 &
+      client_pid=$!
+    else
     setsid env -u CUDA_VISIBLE_DEVICES MUJOCO_EGL_DEVICE_ID="$egl_dev" \
     "$CLIENT_VENV/bin/python" gr00t/eval/rollout_policy.py \
       --n-episodes "$N_EPISODES" --policy-client-host 127.0.0.1 --policy-client-port "$PORT" \
@@ -132,6 +156,7 @@ for task in "${tasks[@]}"; do
       --n-action-steps "$N_ACTION_STEPS" --n-envs "$N_ENVS" \
       --video-dir "$vdir" > "$log" 2>&1 &
     client_pid=$!
+    fi
     sleep "${EGL_CREATE_GRACE:-90}"
     flock -u 9
     # Watchdog: a crashed spawn worker can deadlock AsyncVectorEnv.close()
@@ -141,6 +166,7 @@ for task in "${tasks[@]}"; do
     while kill -0 "$client_pid" 2>/dev/null; do
       if [ "$(date +%s)" -gt "$deadline" ]; then
         echo "[eval-gr1]   TIMEOUT after ${TASK_TIMEOUT:-3600}s — killing client group $client_pid"
+        [[ "${CLIENT_DOCKER:-0}" == "1" ]] && docker kill "eglclient_${PORT}_${attempt}" >/dev/null 2>&1
         kill -9 -- "-$client_pid" 2>/dev/null
         break
       fi
