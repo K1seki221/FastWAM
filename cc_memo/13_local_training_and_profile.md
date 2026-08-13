@@ -615,3 +615,27 @@ leave-one-task-out table [done: X_k28-Y z=3.62 without Can, X_k4-A
 z=1.60]; (3) permutation contrast [done]; (4) seed replicate X_k28+Y
 [NOT STARTED — needs 2 GPUs x 36h]; (5) report per-task CIs + Holm;
 (6) So/Sn twins on 12-task board for a seed-noise bound [optional].
+
+
+## n_envs=5 rescue campaign (2026-08-13, in progress)
+
+CRITICAL PROTOCOL FACT (code-verified, recon agents): robosuite
+hard_reset=False is INVALID for RoboCasa eval — object instances, scene
+layout/style, placements, and camera randomization are ALL sampled in
+Tabletop._load_model() (tabletop.py:414-538), which only runs on the
+hard-reset branch (robosuite base.py:270). Soft reset re-applies the
+PRE-COMPUTED placement dict (tabletop.py:1034 "use pre-computed object
+placements") — the scene freezes; only robot joint jitter varies. NEVER
+eval with hard_reset=False.
+
+Surgical alternative: GL-CONTEXT SINGLETON — keep hard resets (model/sim
+rebuild = full randomization) but monkeypatch robosuite EGLGLContext to a
+per-process cached instance with free() neutered. The crash driver is the
+per-reset EGL context destroy/create churn, not the model rebuild.
+
+Test matrix (6 x 30-min random-action soaks, no server, GPUs 4/5 after Y
+training ends; never touches board GPUs 2/3):
+M1 bare async5 control | M2 bare async5+singleton | M3 container async5 |
+M4 container async5+singleton | M5 bare sync5 | M6 async5 spread 2 GPUs.
+Harness: /data/ruijiezhang/groot_runs/nenv5_lab/{soak.py,run_matrix.sh},
+verdicts -> nenv5_lab/status.log.
