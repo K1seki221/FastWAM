@@ -639,3 +639,21 @@ M1 bare async5 control | M2 bare async5+singleton | M3 container async5 |
 M4 container async5+singleton | M5 bare sync5 | M6 async5 spread 2 GPUs.
 Harness: /data/ruijiezhang/groot_runs/nenv5_lab/{soak.py,run_matrix.sh},
 verdicts -> nenv5_lab/status.log.
+
+MATRIX RESULTS (2026-08-13): M1 bare async5 FAIL@5.7min | M2 +GLsingleton
+FAIL@7.8 | M3 container FAIL@4.8 | M4 container+singleton FAIL@8.1 |
+M5 bare SYNC5 PASS(30min) | M6 spread-2GPU FAIL@6.1.
+RESET-CHURN THEORY DEAD: async crashes happen with ZERO episode resets
+(soak env has no step limit; no episodes ended). THREE-RULE MODEL:
+R1 torch-server + EGL render on SAME gpu => crash (all post-fix bare-lane
+   deaths — those lanes were the first-ever co-resident configs).
+R2 spawn-sibling renderers (AsyncVectorEnv workers) => crash 2-8min,
+   regardless of device spread/containers/context reuse. THE n_envs killer.
+R3 SAFE: serialized rendering (SyncVectorEnv) AND cross-process renderers
+   on separate GPUs with split server/render (board rendered clean through
+   the entire matrix crash storm = direct coexistence proof).
+=> rollout_policy.py gains GROOT_VECTOR_MODE=sync (SyncVectorEnv for
+   n_envs>1). Validation on real 60-ep Bottle: STABLE, 26.5min vs ~50min
+   (1.9x), BUT score 0.10 vs board's 0.30 same ckpt/task (z~2.7) — repeat
+   running; if 0.1 replicates, sync batching corrupts scores => reject and
+   use R3 split multi-lane (2 lanes n_envs=1) for parallelism instead.

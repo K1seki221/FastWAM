@@ -18,6 +18,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
+import os
 import sys
 import time
 from typing import Any
@@ -441,7 +442,11 @@ def run_rollout_gymnasium_policy(
         for idx in range(n_envs)
     ]
 
-    if n_envs == 1:
+    # GROOT_VECTOR_MODE=sync steps all envs serially in ONE process: no
+    # concurrent render operations (spawn-sibling renderers SIGABRT in the
+    # NVIDIA driver on some hosts), while policy inference still batches
+    # across envs.
+    if n_envs == 1 or os.environ.get("GROOT_VECTOR_MODE", "async") == "sync":
         env = gym.vector.SyncVectorEnv(env_fns)
     else:
         env = _RobustAsyncVectorEnv(
