@@ -125,7 +125,7 @@ for task in "${tasks[@]}"; do
   for attempt in $(seq 1 "${MAX_ATTEMPTS:-3}"); do
     exec 9>/tmp/groot_egl_create.lock
     flock -w 1800 9
-    env -u CUDA_VISIBLE_DEVICES MUJOCO_EGL_DEVICE_ID="$egl_dev" \
+    setsid env -u CUDA_VISIBLE_DEVICES MUJOCO_EGL_DEVICE_ID="$egl_dev" \
     "$CLIENT_VENV/bin/python" gr00t/eval/rollout_policy.py \
       --n-episodes "$N_EPISODES" --policy-client-host 127.0.0.1 --policy-client-port "$PORT" \
       --max-episode-steps "$MAX_STEPS" --env-name "gr1_unified/${task}_GR1ArmsAndWaistFourierHands_Env" \
@@ -134,6 +134,18 @@ for task in "${tasks[@]}"; do
     client_pid=$!
     sleep "${EGL_CREATE_GRACE:-90}"
     flock -u 9
+    # Watchdog: a crashed spawn worker can deadlock AsyncVectorEnv.close()
+    # in the parent forever (seen 2026-08-13). Bound the task wall time and
+    # kill the whole process group on expiry (setsid gives it its own pgid).
+    deadline=$(( $(date +%s) + ${TASK_TIMEOUT:-3600} ))
+    while kill -0 "$client_pid" 2>/dev/null; do
+      if [ "$(date +%s)" -gt "$deadline" ]; then
+        echo "[eval-gr1]   TIMEOUT after ${TASK_TIMEOUT:-3600}s — killing client group $client_pid"
+        kill -9 -- "-$client_pid" 2>/dev/null
+        break
+      fi
+      sleep 20
+    done
     wait $client_pid
     rc=$?
     [ $rc -eq 0 ] && break

@@ -574,8 +574,25 @@ EGL PARALLEL-EVAL MYSTERY SOLVED (2026-08-12, research + live-verified):
    spawn) works fine with the pin + correct mapping (15/15 eps, 4x
    throughput/lane); equivalence A/B vs n_envs=1 still pending.
 Parallel driver: /data/ruijiezhang/groot_runs/scale60k24_eval_parallel.sh
-(task-shards 24 tasks over free GPUs 2-7, render redirect 3->2, per-lane
-shader cache, ERR resweep, ~4h/arm at 5-6 lanes vs 20h serial).
+(task-shards 24 tasks over free GPUs 2-7, per-lane shader cache, ERR
+resweep, watchdog TASK_TIMEOUT kills hung client process-groups).
+
+FINAL PARALLELISM VERDICT (2026-08-13, after many controlled attempts):
+on this box/driver-state, ONLY one EGL render context total is stable.
+Everything else eventually SIGABRTs in read_pixels within ~2-6 min:
+n_envs=5 (5 worker contexts, even solo), 2x n_envs=1 lanes on separate
+GPUs, 2 clients on one GPU. The 2-6 min horizon matches the first
+episode-reset wave: robosuite defaults hard_reset=True (re-creates model
++ sim + RENDER CONTEXT every reset) => concurrent context
+teardown/creation on the driver => known NVIDIA multi-context teardown
+race. Short smokes "passed" only because they finished before the reset
+storm (survivorship). n_envs=1 single lane never crashes.
+=> Board evals run FORCE_LANES="2" LANE_N_ENVS=1 (~20h/arm, serial).
+UNTESTED levers for the future (do NOT retry bare parallelism):
+(a) hard_reset=False in the gym wrapper (removes context teardown
+    entirely; also faster resets; likely unlocks n_envs>1);
+(b) per-GPU containers (EGL namespace isolation, NVIDIA's own pattern);
+(c) newer driver branch. Test during the seed-replicate wave.
 
 ## FULL-CORPUS PHASE: 60K steps x 24 tasks, DDP x2 (launched 2026-08-10)
 
