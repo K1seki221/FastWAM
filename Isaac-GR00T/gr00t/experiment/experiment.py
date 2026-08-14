@@ -297,7 +297,9 @@ def run(config: Config):
         report_to="wandb" if config.training.use_wandb else "none",
         seed=config.data.seed,
         deepspeed=deepspeed_config,
-        ddp_find_unused_parameters=False,
+        # Router arms bypass vlln/vl_self_attention => those params get no
+        # grads and strict DDP's reducer errors without unused-param detection.
+        ddp_find_unused_parameters=True if config.training.use_ddp else False,
         ddp_bucket_cap_mb=config.training.ddp_bucket_cap_mb,
         eval_strategy=config.training.eval_strategy,
         eval_steps=config.training.eval_steps,

@@ -85,6 +85,10 @@ layers="${PILOT_LAYERS:-$layers}"
 init="$init ${PILOT_EXTRA:-}"
 # ROUTER_PCPROJ=1 => per-candidate identity-init proj adapters (v1.5-lite)
 [[ "${ROUTER_PCPROJ:-0}" == "1" && "$use_router" == "1" ]] && init="$init --router-candidate-proj"
+# PILOT_USE_DDP=1 => true torch DDP for multi-GPU (fp32 masters; REQUIRED for
+# numerical parity with single-GPU runs — the DeepSpeed default trains in
+# true bf16 and collapses rollout performance)
+[[ "${PILOT_USE_DDP:-0}" == "1" ]] && init="$init --use_ddp"
 
 ld_env=()
 if [[ -d "$FFMPEG_LIB" ]]; then

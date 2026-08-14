@@ -199,6 +199,13 @@ class FinetuneConfig:
     num_gpus: int = 1
     """Number of GPUs available for distributed or single-node training."""
 
+    use_ddp: bool = False
+    """Use plain torch DDP for multi-GPU runs instead of the DeepSpeed ZeRO-2
+    default. CRITICAL for numerical parity with single-GPU training: DeepSpeed
+    casts all parameters AND buffers to true bf16 (module.bfloat16()) and
+    accumulates gradients in bf16, which destroys rollout performance over
+    long runs; DDP keeps fp32 master weights + bf16 autocast."""
+
     use_wandb: bool = False
     """
     If True, log metrics and artifacts to Weights & Biases (wandb).
