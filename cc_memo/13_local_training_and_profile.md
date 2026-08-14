@@ -657,3 +657,33 @@ R3 SAFE: serialized rendering (SyncVectorEnv) AND cross-process renderers
    (1.9x), BUT score 0.10 vs board's 0.30 same ckpt/task (z~2.7) — repeat
    running; if 0.1 replicates, sync batching corrupts scores => reject and
    use R3 split multi-lane (2 lanes n_envs=1) for parallelism instead.
+
+
+## THE bf16 CATASTROPHE & FIX (2026-08-14) — READ BEFORE ANY MULTI-GPU RUN
+
+ROOT CAUSE of the universal 60Kx24 rollout collapse (X_k28 .054, A .076,
+Y .037 vs healthy 30Kx12 .31/.23/.22): use_ddp defaults False =>
+experiment.py:263 routes ANY nproc>1 run to DeepSpeed ZeRO-2 =>
+module.bfloat16() casts ALL params AND buffers to raw bf16 + bf16 grad
+accumulation. Rollout collapses while loss only mildly degrades
+(0.020-0.025 vs 0.013). Proof: ckpt dtype/bytes-per-param, accelerate
+grad-accum warning, EMA buffer (ema_energy) stuck 2-4x off in bf16
+(rms_mix 0.48-0.76 instead of ~1.0), and the empirical control: 100K-run
+ckpt-30000 scored ~0.00 on tasks the 30K12 ckpt scores 0.43-0.58 (same
+eval stack; stack itself validated by control re-eval).
+=> ALL multi-GPU results 2026-08-10..14 are artifacts. All single-GPU
+results (pilot 10Kx6, 30Kx12 wave incl. the router win) remain VALID.
+
+FIX (commit 40cee34, validated 600-step DDPx2): --use_ddp / PILOT_USE_DDP=1
+=> true torch DDP (fp32 masters + bf16 autocast, fp32 grad accum, fp32
+buffers) + ddp_find_unused_parameters=True (router arms bypass vlln =>
+strict DDP reducer errors otherwise). Validation: fp32 ckpt (4 B/param,
+optimizer.pt), 0 deepspeed markers, rms_mix 0.98-1.01, 2.36s/it DDPx2.
+RULE: never launch nproc>1 without PILOT_USE_DDP=1; verify the first log
+event has rms_mix~1.0 and no DeepSpeed strings.
+
+Relaunched scale100k24_X_k28_rlr1e4 as DDPx4 (GPUs 4-7): 1.54s/it => ~1.8
+days. Broken original archived as *_bf16broken. 60Kx24 wave re-run pending
+user decision. Secondary known issues (unfixed, low priority): rank-
+identical (t,eps,dropout) draws under multi-GPU (rank-offset generator
+would fix); EMA energy mean ignores padding.
